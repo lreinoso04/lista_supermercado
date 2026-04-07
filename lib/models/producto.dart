@@ -5,6 +5,7 @@ class Producto {
   int cantidad;
   bool comprado;
   String prioridad; // Alta / Media / Baja
+  double precioEstimado;
 
   Producto({
     this.id,
@@ -13,6 +14,7 @@ class Producto {
     this.cantidad = 1,
     this.comprado = false,
     this.prioridad = 'Media',
+    this.precioEstimado = 0.0,
   });
 
   Map<String, dynamic> toMap() {
@@ -23,6 +25,7 @@ class Producto {
       'cantidad': cantidad,
       'comprado': comprado ? 1 : 0,
       'prioridad': prioridad,
+      'precioEstimado': precioEstimado,
     };
   }
 
@@ -34,6 +37,7 @@ class Producto {
       cantidad: map['cantidad'] as int,
       comprado: map['comprado'] == 1,
       prioridad: map['prioridad'] as String,
+      precioEstimado: (map['precioEstimado'] ?? 0.0).toDouble(),
     );
   }
 }

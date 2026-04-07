@@ -20,8 +20,9 @@ class DBService {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createDB,
+      onUpgrade: _upgradeDB,
     );
   }
 
@@ -33,9 +34,16 @@ class DBService {
         categoria TEXT NOT NULL,
         cantidad INTEGER NOT NULL,
         comprado INTEGER NOT NULL,
-        prioridad TEXT NOT NULL
+        prioridad TEXT NOT NULL,
+        precioEstimado REAL NOT NULL DEFAULT 0.0
       )
     ''');
+  }
+
+  Future _upgradeDB(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE productos ADD COLUMN precioEstimado REAL NOT NULL DEFAULT 0.0');
+    }
   }
 
   Future<Producto> create(Producto producto) async {

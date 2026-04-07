@@ -28,6 +28,7 @@ class _AgregarVozViewState extends State<AgregarVozView> {
   String _categoriaSeleccionada = 'Lácteos';
   String _prioridadSeleccionada = 'Media';
   int _cantidadSeleccionada = 1;
+  double _precioSeleccionado = 0.0;
 
   static const List<String> _categorias = [
     'Lácteos', 'Carnes', 'Frutas y Verduras', 'Panadería',
@@ -249,6 +250,24 @@ class _AgregarVozViewState extends State<AgregarVozView> {
               ]),
               const SizedBox(height: 16),
 
+              const Text('PRECIO ESTIMADO (Opcionado)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+              const SizedBox(height: 8),
+              TextFormField(
+                initialValue: _precioSeleccionado > 0 ? _precioSeleccionado.toString() : '',
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  hintText: 'Ej. 150.50',
+                  prefixIcon: const Icon(Icons.attach_money, color: kVerde, size: 18),
+                  filled: true, fillColor: kFondo,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+                onChanged: (v) {
+                  _precioSeleccionado = double.tryParse(v) ?? 0.0;
+                },
+              ),
+              const SizedBox(height: 16),
+
               const Text('CATEGORÍA', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
@@ -306,8 +325,9 @@ class _AgregarVozViewState extends State<AgregarVozView> {
                   categoria: _categoriaSeleccionada,
                   cantidad: _cantidadSeleccionada,
                   prioridad: _prioridadSeleccionada,
+                  precioEstimado: _precioSeleccionado,
                 ));
-                _safe(() { _textoCapturado = ''; _cantidadSeleccionada = 1; });
+                _safe(() { _textoCapturado = ''; _cantidadSeleccionada = 1; _precioSeleccionado = 0.0; });
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text('✅ "$nombreProducto" agregado a tu lista'),

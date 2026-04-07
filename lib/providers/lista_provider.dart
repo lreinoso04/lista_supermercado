@@ -9,6 +9,12 @@ class ListaProvider extends ChangeNotifier {
   List<Producto> get productos => _productos;
   bool get isLoading => _isLoading;
 
+  double get gastoTotal {
+    return _productos
+        .where((p) => p.comprado)
+        .fold(0.0, (sum, p) => sum + (p.precioEstimado * p.cantidad));
+  }
+
   Future<void> cargarProductos() async {
     _isLoading = true;
     notifyListeners();
@@ -39,11 +45,33 @@ class ListaProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> actualizarProducto(Producto p) async {
+    await DBService.instance.update(p);
+    final index = _productos.indexWhere((item) => item.id == p.id);
+    if (index != -1) {
+      _productos[index] = p;
+      notifyListeners();
+    }
+  }
+
   Future<void> eliminarProducto(Producto p) async {
     if (p.id != null) {
       await DBService.instance.delete(p.id!);
       _productos.removeWhere((item) => item.id == p.id);
       notifyListeners();
     }
+  }
+
+  Future<void> reiniciarLista() async {
+    _isLoading = true;
+    notifyListeners();
+    for (var p in _productos) {
+      if (p.comprado) {
+        p.comprado = false;
+        await DBService.instance.update(p);
+      }
+    }
+    _isLoading = false;
+    notifyListeners();
   }
 }

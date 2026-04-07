@@ -79,6 +79,31 @@ class PerfilView extends StatelessWidget {
             _statCard('$pendientes', 'Pendientes', Icons.pending_rounded, kAmarillo),
           ]),
 
+          if (context.watch<ListaProvider>().gastoTotal > 0) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: kVerdeMenta,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: kVerdeClaro.withValues(alpha: 0.5)),
+              ),
+              child: Row(children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: kVerde.withValues(alpha: 0.1), shape: BoxShape.circle),
+                  child: const Icon(Icons.monetization_on_rounded, color: kVerde),
+                ),
+                const SizedBox(width: 16),
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('Dinero en Carrito', style: TextStyle(fontSize: 12, color: kVerdeMedio, fontWeight: FontWeight.bold)),
+                  Text('\$${context.watch<ListaProvider>().gastoTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: kVerde)),
+                ]),
+              ]),
+            ),
+          ],
+
           const SizedBox(height: 12),
 
           // Progreso general

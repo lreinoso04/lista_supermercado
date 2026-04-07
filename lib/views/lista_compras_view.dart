@@ -134,6 +134,11 @@ class _ListaComprasViewState extends State<ListaComprasView> {
             style: const TextStyle(fontSize: 12, color: Colors.grey)),
         ]),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded, color: Colors.grey),
+            tooltip: 'Reiniciar carrito',
+            onPressed: () => _mostrarConfirmacionReinicio(context, provider),
+          ),
           // Botón leer lista en voz alta
           Padding(
             padding: const EdgeInsets.only(right: 8),
@@ -193,6 +198,14 @@ class _ListaComprasViewState extends State<ListaComprasView> {
                 valueColor: const AlwaysStoppedAnimation<Color>(kVerde),
               ),
             ),
+            if (provider.gastoTotal > 0) ...[
+              const SizedBox(height: 8),
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                const Text('Gasto en carrito', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                Text('\$${provider.gastoTotal.toStringAsFixed(2)}',
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: kVerdeMedio)),
+              ]),
+            ],
           ]),
         ),
 
@@ -263,6 +276,153 @@ class _ListaComprasViewState extends State<ListaComprasView> {
     ]);
   }
 
+  void _mostrarConfirmacionReinicio(BuildContext context, ListaProvider provider) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('¿Reiniciar Carrito?'),
+        content: const Text('Esto vaciará tu carrito y pondrá todos los productos como "Pendientes" nuevamente. ¿Deseas continuar?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar', style: TextStyle(color: Colors.grey))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: kVerde),
+            onPressed: () {
+              Navigator.pop(ctx);
+              provider.reiniciarLista();
+            },
+            child: const Text('Sí, Reiniciar', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _mostrarEditarProducto(BuildContext context, Producto p, ListaProvider provider) {
+    String editCategoria = p.categoria;
+    String editPrioridad = p.prioridad;
+    int editCantidad = p.cantidad;
+    double editPrecio = p.precioEstimado;
+    final nombreCtrl = TextEditingController(text: p.nombre);
+
+    final categorias = [
+      'Lácteos', 'Carnes', 'Frutas y Verduras', 'Panadería',
+      'Granos', 'Bebidas', 'Limpieza', 'Otros',
+    ];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Editar Producto', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              TextField(
+                controller: nombreCtrl,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: InputDecoration(
+                  labelText: 'Nombre',
+                  filled: true, fillColor: kFondo,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+              ),
+              const SizedBox(height: 16),
+              
+              const Text('CANTIDAD', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+              const SizedBox(height: 8),
+              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                GestureDetector(
+                  onTap: () { if (editCantidad > 1) setDlg(() => editCantidad--); },
+                  child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: kVerdeMenta, borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.remove, color: kVerde, size: 22)),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Text('$editCantidad', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: kVerde)),
+                ),
+                GestureDetector(
+                  onTap: () { setDlg(() => editCantidad++); },
+                  child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: kVerdeMenta, borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.add, color: kVerde, size: 22)),
+                ),
+              ]),
+              const SizedBox(height: 16),
+
+              const Text('PRECIO ESTIMADO', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+              const SizedBox(height: 8),
+              TextFormField(
+                initialValue: editPrecio > 0 ? editPrecio.toString() : '',
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  hintText: 'Ej. 150.50',
+                  prefixIcon: const Icon(Icons.attach_money, color: kVerde, size: 18),
+                  filled: true, fillColor: kFondo,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+                onChanged: (v) { editPrecio = double.tryParse(v) ?? 0.0; },
+              ),
+              const SizedBox(height: 16),
+
+              const Text('CATEGORÍA', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                initialValue: categorias.contains(editCategoria) ? editCategoria : 'Otros',
+                items: categorias.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                onChanged: (v) { if (v != null) setDlg(() => editCategoria = v); },
+                decoration: InputDecoration(filled: true, fillColor: kFondo, contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
+              ),
+              const SizedBox(height: 16),
+
+              const Text('PRIORIDAD', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+              const SizedBox(height: 8),
+              Row(children: ['Alta', 'Media', 'Baja'].map((pri) {
+                final isSelected = editPrioridad == pri;
+                final color = pri == 'Alta' ? kNaranja : (pri == 'Media' ? kAmarillo : kVerdeClaro);
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                    child: GestureDetector(
+                      onTap: () => setDlg(() => editPrioridad = pri),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(color: isSelected ? color.withValues(alpha: 0.15) : kFondo, borderRadius: BorderRadius.circular(10), border: Border.all(color: isSelected ? color : Colors.transparent, width: 2)),
+                        child: Text(pri, textAlign: TextAlign.center, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isSelected ? color : Colors.grey)),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList()),
+            ]),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                provider.eliminarProducto(p);
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('🗑️ Producto eliminado'), backgroundColor: Colors.redAccent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), behavior: SnackBarBehavior.floating));
+              }, 
+              child: const Text('Eliminar', style: TextStyle(color: Colors.redAccent))
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: kVerde),
+              onPressed: () {
+                Navigator.pop(ctx);
+                p.nombre = nombreCtrl.text.trim().isNotEmpty ? nombreCtrl.text.trim() : p.nombre;
+                p.cantidad = editCantidad;
+                p.precioEstimado = editPrecio;
+                p.categoria = editCategoria;
+                p.prioridad = editPrioridad;
+                provider.actualizarProducto(p);
+              },
+              child: const Text('Guardar', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildProductoCard(BuildContext context, Producto p) {
     final colorPrioridad = p.prioridad == 'Alta' ? kNaranja : (p.prioridad == 'Media' ? kAmarillo : kVerdeClaro);
     final iconoCategoria = _iconoCategoria(p.categoria);
@@ -297,6 +457,7 @@ class _ListaComprasViewState extends State<ListaComprasView> {
           ],
         ),
         child: ListTile(
+          onTap: () => _mostrarEditarProducto(context, p, context.read<ListaProvider>()),
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           leading: GestureDetector(
             onTap: () {
@@ -339,15 +500,23 @@ class _ListaComprasViewState extends State<ListaComprasView> {
                 style: TextStyle(fontSize: 10, color: colorPrioridad, fontWeight: FontWeight.bold)),
             ),
           ]),
-          trailing: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: kFondo,
-              borderRadius: BorderRadius.circular(10),
+          trailing: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: kFondo,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text('×${p.cantidad}',
+                style: const TextStyle(fontWeight: FontWeight.bold, color: kVerdeMedio, fontSize: 13)),
             ),
-            child: Text('×${p.cantidad}',
-              style: const TextStyle(fontWeight: FontWeight.bold, color: kVerdeMedio, fontSize: 14)),
-          ),
+            if (p.precioEstimado > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text('\$${(p.precioEstimado * p.cantidad).toStringAsFixed(0)}',
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+              ),
+          ]),
         ),
       ),
     );
