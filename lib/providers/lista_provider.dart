@@ -136,4 +136,49 @@ class ListaProvider extends ChangeNotifier {
     _isLoading = false;
     notifyListeners();
   }
+
+  String exportarListaBase64() {
+    final pendientes = _productos.where((p) => !p.comprado).toList();
+    if (pendientes.isEmpty) return "";
+    
+    final jsonString = jsonEncode(pendientes.map((p) => p.toMap()).toList());
+    final bytes = utf8.encode(jsonString);
+    return base64Encode(bytes);
+  }
+
+  Future<void> importarListaBase64(String base64Data) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      final bytes = base64Decode(base64Data);
+      final jsonString = utf8.decode(bytes);
+      final List<dynamic> decoded = jsonDecode(jsonString);
+
+      for (var item in decoded) {
+        final importedP = Producto.fromMap(item as Map<String, dynamic>);
+        importedP.id = null; // Forza a SQLite a crear una nueva llave primaria
+        importedP.comprado = false; 
+        
+        // Suma Inteligente si ya existía el mismo producto
+        final index = _productos.indexWhere((p) => p.nombre.toLowerCase().trim() == importedP.nombre.toLowerCase().trim());
+        if (index != -1) {
+          final pBase = _productos[index];
+          pBase.cantidad += importedP.cantidad;
+          await DBService.instance.update(pBase);
+        } else {
+          final nuevoP = await DBService.instance.create(importedP);
+          _productos.add(nuevoP);
+          await DBService.instance.upsertCatalogo(nuevoP);
+        }
+      }
+      _catalogo = await DBService.instance.readAllCatalogo();
+    } catch (e) {
+      debugPrint("Error importando lista: $e");
+      throw Exception("El código no es válido.");
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 }

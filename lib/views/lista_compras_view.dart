@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:provider/provider.dart';
 import '../models/producto.dart';
 import '../providers/lista_provider.dart';
@@ -134,6 +135,23 @@ class _ListaComprasViewState extends State<ListaComprasView> {
             style: const TextStyle(fontSize: 12, color: Colors.grey)),
         ]),
         actions: [
+          IconButton(
+             icon: const Icon(Icons.download_rounded, color: kVerdeMedio),
+             tooltip: 'Recibir Lista Externa',
+             onPressed: () => _mostrarDialogoImportar(context, provider),
+          ),
+          IconButton(
+             icon: const Icon(Icons.share_rounded, color: kVerdeMedio),
+             tooltip: 'Compartir mi Lista',
+             onPressed: () {
+               final codigo = provider.exportarListaBase64();
+               if (codigo.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('La lista está vacía o ya compraste todo. Agrega pendientes primero.')));
+                  return;
+               }
+               Share.share('🛒 ¡Hola! Te comparto mi lista de supermercado. Copia todo este código y pégalo en el botón "Recibir (Flecha Minta)" de tu app SmartCart:\n\n$codigo');
+             },
+          ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: Colors.grey),
             tooltip: 'Reiniciar carrito',
@@ -344,6 +362,55 @@ class _ListaComprasViewState extends State<ListaComprasView> {
       ),
     );
   }
+
+  void _mostrarDialogoImportar(BuildContext context, ListaProvider provider) {
+    final ctrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(children: [Icon(Icons.download, color: kVerde), SizedBox(width: 8), Text('Importar Lista')]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Pega aquí el código que te compartieron por WhatsApp o mensaje:', style: TextStyle(fontSize: 13, color: Colors.grey)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              maxLines: 4,
+              decoration: InputDecoration(
+                filled: true, fillColor: kFondo,
+                hintText: 'Pega el código aquí...',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar', style: TextStyle(color: Colors.grey))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: kVerde),
+            onPressed: () async {
+               if (ctrl.text.trim().isEmpty) return;
+               Navigator.pop(ctx);
+               try {
+                 await provider.importarListaBase64(ctrl.text.trim());
+                 if (context.mounted) {
+                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ ¡Lista importada y fusionada con éxito!'), backgroundColor: kVerde));
+                 }
+               } catch (e) {
+                 if (context.mounted) {
+                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('❌ Hubo un fallo: ${e.toString()}'), backgroundColor: Colors.red));
+                 }
+               }
+            },
+            child: const Text('Cargar', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      )
+    );
+  }
+
 
   void _mostrarEditarProducto(BuildContext context, Producto p, ListaProvider provider) {
     String editCategoria = p.categoria;
