@@ -3,12 +3,14 @@ class HistorialCompra {
   String fecha;
   double total;
   int cantidadProductos;
+  String? productosJson;
 
   HistorialCompra({
     this.id,
     required this.fecha,
     required this.total,
     required this.cantidadProductos,
+    this.productosJson,
   });
 
   Map<String, dynamic> toMap() {
@@ -17,6 +19,7 @@ class HistorialCompra {
       'fecha': fecha,
       'total': total,
       'cantidadProductos': cantidadProductos,
+      'productosJson': productosJson,
     };
   }
 
@@ -26,6 +29,7 @@ class HistorialCompra {
       fecha: map['fecha'] as String,
       total: (map['total'] as num).toDouble(),
       cantidadProductos: map['cantidadProductos'] as int,
+      productosJson: map['productosJson'] as String?,
     );
   }
 }

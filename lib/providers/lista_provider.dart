@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../models/producto.dart';
 import '../models/historial_compra.dart';
@@ -105,6 +106,7 @@ class ListaProvider extends ChangeNotifier {
     notifyListeners();
 
     final comprados = _productos.where((p) => p.comprado).toList();
+
     if (comprados.isNotEmpty) {
       double total = comprados.fold(0.0, (sum, p) => sum + (p.precioEstimado * p.cantidad));
       int cantidad = comprados.fold(0, (sum, p) => sum + p.cantidad);
@@ -114,18 +116,22 @@ class ListaProvider extends ChangeNotifier {
         fecha: fecha,
         total: total,
         cantidadProductos: cantidad,
+        productosJson: jsonEncode(comprados.map((p) => p.toMap()).toList()),
       ));
-    }
 
-    // Al terminar agregaremos todos al catálogo de nuevo por seguridad
-    for (var p in _productos) {
-      await DBService.instance.upsertCatalogo(p);
+      // Solo eliminamos de la base de datos de productos aquellos que se compraron
+      for (var p in comprados) {
+        await DBService.instance.upsertCatalogo(p);
+        if (p.id != null) {
+          await DBService.instance.delete(p.id!);
+        }
+      }
+      
+      _catalogo = await DBService.instance.readAllCatalogo();
+      
+      // Removemos los items procesados de la lista local
+      _productos.removeWhere((item) => item.comprado);
     }
-    _catalogo = await DBService.instance.readAllCatalogo();
-
-    // Vaciar lista actual
-    await DBService.instance.deleteAllProductos();
-    _productos.clear();
 
     _isLoading = false;
     notifyListeners();

@@ -21,7 +21,7 @@ class DBService {
 
     return await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -55,7 +55,8 @@ class DBService {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         fecha TEXT NOT NULL,
         total REAL NOT NULL,
-        cantidadProductos INTEGER NOT NULL
+        cantidadProductos INTEGER NOT NULL,
+        productosJson TEXT
       )
     ''');
   }
@@ -79,9 +80,18 @@ class DBService {
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           fecha TEXT NOT NULL,
           total REAL NOT NULL,
-          cantidadProductos INTEGER NOT NULL
+          cantidadProductos INTEGER NOT NULL,
+          productosJson TEXT
         )
       ''');
+    }
+    if (oldVersion < 4) {
+      // Intento seguro por si la columna ya existe de alguna caída previa
+      try {
+        await db.execute('ALTER TABLE historial_compras ADD COLUMN productosJson TEXT');
+      } catch (e) {
+        // La columna posiblemente ya exista, continuamos.
+      }
     }
   }
 
@@ -171,6 +181,11 @@ class DBService {
     final db = await instance.database;
     final result = await db.query('historial_compras', orderBy: 'id DESC');
     return result.map((json) => HistorialCompra.fromMap(json)).toList();
+  }
+
+  Future<void> deleteHistorial(int id) async {
+    final db = await instance.database;
+    await db.delete('historial_compras', where: 'id = ?', whereArgs: [id]);
   }
 
   Future close() async {
