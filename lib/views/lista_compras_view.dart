@@ -139,6 +139,11 @@ class _ListaComprasViewState extends State<ListaComprasView> {
             tooltip: 'Reiniciar carrito',
             onPressed: () => _mostrarConfirmacionReinicio(context, provider),
           ),
+          IconButton(
+            icon: const Icon(Icons.delete_sweep_rounded, color: Colors.redAccent),
+            tooltip: 'Vaciar lista',
+            onPressed: () => _mostrarConfirmacionVaciar(context, provider),
+          ),
           // Botón leer lista en voz alta
           Padding(
             padding: const EdgeInsets.only(right: 8),
@@ -254,6 +259,26 @@ class _ListaComprasViewState extends State<ListaComprasView> {
                       return _buildProductoCard(context, p);
                     }),
                   ],
+                  const SizedBox(height: 24),
+                  if (productos.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: kVerde,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        ),
+                        icon: const Icon(Icons.check_circle_outline, color: Colors.white),
+                        label: const Text('Terminar Compra', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                        onPressed: () {
+                          provider.terminarCompra();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('✅ Compra terminada y guardada en el historial'), backgroundColor: kVerde),
+                          );
+                        },
+                      ),
+                    ),
                 ],
               ),
         ),
@@ -292,6 +317,28 @@ class _ListaComprasViewState extends State<ListaComprasView> {
               provider.reiniciarLista();
             },
             child: const Text('Sí, Reiniciar', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _mostrarConfirmacionVaciar(BuildContext context, ListaProvider provider) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('¿Vaciar Lista?'),
+        content: const Text('Esto eliminará TODOS los productos de tu lista actual desde cero. ¿Deseas continuar?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar', style: TextStyle(color: Colors.grey))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () {
+              Navigator.pop(ctx);
+              provider.vaciarListaDesdeCero();
+            },
+            child: const Text('Sí, Vaciar', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),

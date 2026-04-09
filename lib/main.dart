@@ -12,7 +12,7 @@ void main() {
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => ListaProvider()..cargarProductos()),
+        ChangeNotifierProvider(create: (_) => ListaProvider()..cargarListas()),
       ],
       child: const MarketApp(),
     ),
