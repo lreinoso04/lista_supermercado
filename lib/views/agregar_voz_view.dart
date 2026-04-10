@@ -30,11 +30,6 @@ class _AgregarVozViewState extends State<AgregarVozView> {
   int _cantidadSeleccionada = 1;
   double _precioSeleccionado = 0.0;
 
-  static const List<String> _categorias = [
-    'Lácteos', 'Carnes', 'Frutas y Verduras', 'Panadería',
-    'Granos', 'Bebidas', 'Limpieza', 'Otros',
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -193,6 +188,14 @@ class _AgregarVozViewState extends State<AgregarVozView> {
   void _showGuardarDialog() {
     if (!mounted) return;
     final nombreProducto = _textoCapturado.trim();
+    final provider = context.read<ListaProvider>();
+    final categoriasList = provider.categorias.isEmpty 
+        ? ['Otros'] 
+        : provider.categorias.map((c) => c.nombre).toList();
+    if (!categoriasList.contains(_categoriaSeleccionada)) {
+      _categoriaSeleccionada = categoriasList.first;
+    }
+
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -271,8 +274,9 @@ class _AgregarVozViewState extends State<AgregarVozView> {
               const Text('CATEGORÍA', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 initialValue: _categoriaSeleccionada,
-                items: _categorias.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                items: categoriasList.map((c) => DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis))).toList(),
                 onChanged: (v) { if (v != null) setDlg(() => _categoriaSeleccionada = v); },
                 decoration: InputDecoration(
                   filled: true, fillColor: kFondo,

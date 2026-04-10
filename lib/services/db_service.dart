@@ -2,6 +2,8 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/producto.dart';
 import '../models/historial_compra.dart';
+import '../models/categoria_model.dart';
+import 'package:flutter/material.dart';
 
 class DBService {
   static final DBService instance = DBService._init();
@@ -21,7 +23,7 @@ class DBService {
 
     return await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -59,6 +61,36 @@ class DBService {
         productosJson TEXT
       )
     ''');
+    
+    await _initCategoriasTable(db);
+  }
+
+  Future<void> _initCategoriasTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS categorias (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre TEXT NOT NULL,
+        colorValue INTEGER NOT NULL,
+        iconCode INTEGER NOT NULL
+      )
+    ''');
+
+    final batch = db.batch();
+    final defaultCats = [
+      {'nombre': 'Lácteos',          'iconCode': Icons.egg_outlined.codePoint,            'colorValue': 0xFF29B6F6},
+      {'nombre': 'Carnes',           'iconCode': Icons.restaurant_outlined.codePoint,     'colorValue': 0xFFEF5350},
+      {'nombre': 'Frutas y Verduras','iconCode': Icons.eco_outlined.codePoint,            'colorValue': 0xFF66BB6A},
+      {'nombre': 'Panadería',        'iconCode': Icons.bakery_dining_outlined.codePoint,  'colorValue': 0xFFFF8A65},
+      {'nombre': 'Granos',           'iconCode': Icons.grain.codePoint,                   'colorValue': 0xFFFFCA28},
+      {'nombre': 'Bebidas',          'iconCode': Icons.local_drink_outlined.codePoint,    'colorValue': 0xFF7E57C2},
+      {'nombre': 'Limpieza',         'iconCode': Icons.clean_hands_outlined.codePoint,    'colorValue': 0xFF26C6DA},
+      {'nombre': 'Otros',            'iconCode': Icons.shopping_bag_outlined.codePoint,   'colorValue': 0xFF8D6E63},
+    ];
+
+    for (var cat in defaultCats) {
+      batch.insert('categorias', cat);
+    }
+    await batch.commit();
   }
 
   Future _upgradeDB(Database db, int oldVersion, int newVersion) async {
@@ -92,6 +124,9 @@ class DBService {
       } catch (e) {
         // La columna posiblemente ya exista, continuamos.
       }
+    }
+    if (oldVersion < 5) {
+      await _initCategoriasTable(db);
     }
   }
 
@@ -186,6 +221,39 @@ class DBService {
   Future<void> deleteHistorial(int id) async {
     final db = await instance.database;
     await db.delete('historial_compras', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // --- CATEGORIAS CRUD ---
+  Future<CategoriaModel> createCategoria(CategoriaModel categoria) async {
+    final db = await instance.database;
+    final id = await db.insert('categorias', categoria.toMap());
+    categoria.id = id;
+    return categoria;
+  }
+
+  Future<List<CategoriaModel>> readAllCategorias() async {
+    final db = await instance.database;
+    final result = await db.query('categorias', orderBy: 'id ASC');
+    return result.map((json) => CategoriaModel.fromMap(json)).toList();
+  }
+
+  Future<int> updateCategoria(CategoriaModel categoria) async {
+    final db = await instance.database;
+    return db.update(
+      'categorias',
+      categoria.toMap(),
+      where: 'id = ?',
+      whereArgs: [categoria.id],
+    );
+  }
+
+  Future<int> deleteCategoria(int id) async {
+    final db = await instance.database;
+    return await db.delete(
+      'categorias',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   Future close() async {

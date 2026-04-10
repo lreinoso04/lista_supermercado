@@ -1,21 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/producto.dart';
+import '../models/categoria_model.dart';
 import '../providers/lista_provider.dart';
 import '../theme/colors.dart';
 
 class CategoriasView extends StatelessWidget {
   const CategoriasView({super.key});
 
-  static const List<Map<String, dynamic>> _cats = [
-    {'nombre': 'Lácteos',          'icon': Icons.egg_outlined,            'color': Color(0xFF29B6F6)},
-    {'nombre': 'Carnes',           'icon': Icons.restaurant_outlined,     'color': Color(0xFFEF5350)},
-    {'nombre': 'Frutas y Verduras','icon': Icons.eco_outlined,            'color': Color(0xFF66BB6A)},
-    {'nombre': 'Panadería',        'icon': Icons.bakery_dining_outlined,  'color': Color(0xFFFF8A65)},
-    {'nombre': 'Granos',           'icon': Icons.grain,                   'color': Color(0xFFFFCA28)},
-    {'nombre': 'Bebidas',          'icon': Icons.local_drink_outlined,    'color': Color(0xFF7E57C2)},
-    {'nombre': 'Limpieza',         'icon': Icons.clean_hands_outlined,    'color': Color(0xFF26C6DA)},
-    {'nombre': 'Otros',            'icon': Icons.shopping_bag_outlined,   'color': Color(0xFF8D6E63)},
+  static const List<IconData> iconOptions = [
+     Icons.label_important, Icons.egg_outlined, Icons.restaurant_outlined, Icons.eco_outlined,
+     Icons.bakery_dining_outlined, Icons.grain, Icons.local_drink_outlined, Icons.clean_hands_outlined,
+     Icons.shopping_bag_outlined, Icons.fastfood_outlined, Icons.local_cafe_outlined, Icons.pets_outlined,
+     Icons.child_care, Icons.medical_services_outlined, Icons.home_outlined
   ];
 
   @override
@@ -23,18 +20,27 @@ class CategoriasView extends StatelessWidget {
     final provider = context.watch<ListaProvider>();
     final catalogo = provider.catalogo;
     final activos = provider.productos.map((e) => e.nombre).toList();
+    final categorias = provider.categorias;
 
     return Scaffold(
       backgroundColor: kFondo,
       appBar: AppBar(
         title: const Text('Categorías', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
       ),
-      body: ListView(
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: kVerde,
+        tooltip: 'Crear nueva categoría',
+        onPressed: () => _mostrarDialogoCategoria(context, provider, null),
+        child: const Icon(Icons.add, color: kBlanco),
+      ),
+      body: categorias.isEmpty 
+        ? const Center(child: Text('No hay categorías guardadas', style: TextStyle(color: Colors.grey)))
+        : ListView(
         padding: const EdgeInsets.all(16),
-        children: _cats.map((cat) {
-          final nombre = cat['nombre'] as String;
-          final color  = cat['color'] as Color;
-          final icon   = cat['icon'] as IconData;
+        children: categorias.map((cat) {
+          final nombre = cat.nombre;
+          final color  = Color(cat.colorValue);
+          final icon   = CategoriasView.iconOptions.firstWhere((i) => i.codePoint == cat.iconCode, orElse: () => Icons.label_important);
           final items  = catalogo.where((p) => p.categoria == nombre).toList();
 
           return Container(
@@ -63,20 +69,16 @@ class CategoriasView extends StatelessWidget {
                     : '${items.length} en historial',
                   style: const TextStyle(fontSize: 12, color: Colors.grey),
                 ),
-                trailing: items.isEmpty
-                  ? const Icon(Icons.chevron_right, color: Colors.grey)
-                  : Row(mainAxisSize: MainAxisSize.min, children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: color.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text('${items.length}',
-                          style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
-                      ),
-                      const Icon(Icons.expand_more, color: Colors.grey),
-                    ]),
+                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                  IconButton(
+                    icon: Icon(Icons.edit, size: 18, color: Colors.grey.shade400),
+                    onPressed: () => _mostrarDialogoCategoria(context, provider, cat),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.delete, size: 18, color: Colors.red.shade300),
+                    onPressed: () => _eliminarCategoria(context, provider, cat, items.length),
+                  ),
+                ]),
                 children: [
                   if (items.isEmpty)
                     const Padding(
@@ -123,6 +125,113 @@ class CategoriasView extends StatelessWidget {
           );
         }).toList(),
       ),
+    );
+  }
+
+  void _eliminarCategoria(BuildContext context, ListaProvider provider, CategoriaModel cat, int itemsCount) {
+    if (itemsCount > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('No puedes eliminar una categoría con productos. Borra o recategoriza los productos primero.'),
+        backgroundColor: Colors.redAccent,
+      ));
+      return;
+    }
+    showDialog(context: context, builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Text('Eliminar Categoría'),
+      content: Text('¿Seguro que deseas eliminar la categoría "${cat.nombre}"?'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar', style: TextStyle(color: Colors.grey))),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+          onPressed: () { provider.eliminarCategoria(cat); Navigator.pop(ctx); },
+          child: const Text('Eliminar', style: TextStyle(color: Colors.white)),
+        )
+      ]
+    ));
+  }
+
+  void _mostrarDialogoCategoria(BuildContext context, ListaProvider provider, CategoriaModel? existingCat) {
+    final nombreCtrl = TextEditingController(text: existingCat?.nombre ?? '');
+    int iconCode = existingCat?.iconCode ?? Icons.label_important.codePoint;
+    Color colorSelection = existingCat != null ? Color(existingCat.colorValue) : kVerdeMedio;
+
+    final List<Color> colorOptions = [
+       kVerdeMedio, Colors.blue.shade400, Colors.red.shade400, Colors.orange.shade400, 
+       Colors.purple.shade400, Colors.teal.shade400, Colors.brown.shade400, Colors.pink.shade400,
+       Colors.amber.shade600, Colors.indigo.shade400, Colors.cyan.shade400
+    ];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text(existingCat == null ? 'Nueva Categoría' : 'Editar Categoría', style: const TextStyle(fontWeight: FontWeight.bold)),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              TextField(
+                controller: nombreCtrl,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: InputDecoration(
+                  labelText: 'Nombre de categoría',
+                  filled: true, fillColor: kFondo,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text('Ícono', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+              const SizedBox(height: 8),
+              Wrap(spacing: 8, children: CategoriasView.iconOptions.map((i) => ChoiceChip(
+                label: Icon(i, color: iconCode == i.codePoint ? Colors.white : Colors.grey.shade700, size: 20),
+                selected: iconCode == i.codePoint,
+                selectedColor: colorSelection,
+                backgroundColor: kFondo,
+                showCheckmark: false,
+                onSelected: (val) { if(val) setDlg(() => iconCode = i.codePoint); }
+              )).toList()),
+              const SizedBox(height: 16),
+              const Text('Color', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+              const SizedBox(height: 8),
+              Wrap(spacing: 12, runSpacing: 12, children: colorOptions.map((c) => GestureDetector(
+                onTap: () => setDlg(() => colorSelection = c),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 36, height: 36,
+                  decoration: BoxDecoration(
+                    color: c, shape: BoxShape.circle,
+                    border: colorSelection == c ? Border.all(color: Colors.black26, width: 2) : null,
+                  ),
+                  child: colorSelection == c ? const Icon(Icons.check, size: 20, color: Colors.white) : null,
+                ),
+              )).toList()),
+            ])
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar', style: TextStyle(color: Colors.grey))),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: colorSelection),
+              onPressed: () {
+                if (nombreCtrl.text.trim().isEmpty) return;
+                if (existingCat == null) {
+                  provider.agregarCategoria(CategoriaModel(
+                    nombre: nombreCtrl.text.trim(), 
+                    colorValue: colorSelection.toARGB32(), 
+                    iconCode: iconCode
+                  ));
+                } else {
+                  existingCat.nombre = nombreCtrl.text.trim();
+                  existingCat.colorValue = colorSelection.toARGB32();
+                  existingCat.iconCode = iconCode;
+                  provider.actualizarCategoria(existingCat);
+                }
+                Navigator.pop(ctx);
+              },
+              child: const Text('Guardar', style: TextStyle(color: Colors.white))
+            )
+          ]
+        )
+      )
     );
   }
 

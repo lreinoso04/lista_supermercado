@@ -2,15 +2,18 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../models/producto.dart';
 import '../models/historial_compra.dart';
+import '../models/categoria_model.dart';
 import '../services/db_service.dart';
 
 class ListaProvider extends ChangeNotifier {
   List<Producto> _productos = [];
   List<Producto> _catalogo = [];
+  List<CategoriaModel> _categorias = [];
   bool _isLoading = false;
 
   List<Producto> get productos => _productos;
   List<Producto> get catalogo => _catalogo;
+  List<CategoriaModel> get categorias => _categorias;
   bool get isLoading => _isLoading;
 
   double get gastoTotal {
@@ -25,6 +28,7 @@ class ListaProvider extends ChangeNotifier {
 
     _productos = await DBService.instance.readAllProductos();
     _catalogo = await DBService.instance.readAllCatalogo();
+    _categorias = await DBService.instance.readAllCategorias();
 
     _isLoading = false;
     notifyListeners();
@@ -73,6 +77,30 @@ class ListaProvider extends ChangeNotifier {
     if (p.id != null) {
       await DBService.instance.delete(p.id!);
       _productos.removeWhere((item) => item.id == p.id);
+      notifyListeners();
+    }
+  }
+
+  // --- CATEGORIAS ---
+  Future<void> agregarCategoria(CategoriaModel c) async {
+    final nueva = await DBService.instance.createCategoria(c);
+    _categorias.add(nueva);
+    notifyListeners();
+  }
+
+  Future<void> actualizarCategoria(CategoriaModel c) async {
+    await DBService.instance.updateCategoria(c);
+    final idx = _categorias.indexWhere((cat) => cat.id == c.id);
+    if (idx != -1) {
+      _categorias[idx] = c;
+      notifyListeners();
+    }
+  }
+
+  Future<void> eliminarCategoria(CategoriaModel c) async {
+    if (c.id != null) {
+      await DBService.instance.deleteCategoria(c.id!);
+      _categorias.removeWhere((cat) => cat.id == c.id);
       notifyListeners();
     }
   }
@@ -146,10 +174,20 @@ class ListaProvider extends ChangeNotifier {
     return base64Encode(bytes);
   }
 
-  Future<void> importarListaBase64(String base64Data) async {
+  Future<void> importarListaBase64(String textoPegado) async {
     try {
       _isLoading = true;
       notifyListeners();
+
+      // Extracción Inteligente del código Base64
+      final parts = textoPegado.split(RegExp(r'\s+'));
+      String base64Data = '';
+      for (var w in parts) {
+        if (w.length > base64Data.length && RegExp(r'^[A-Za-z0-9+/=]+$').hasMatch(w)) {
+           base64Data = w;
+        }
+      }
+      if (base64Data.isEmpty) base64Data = textoPegado.trim();
 
       final bytes = base64Decode(base64Data);
       final jsonString = utf8.decode(bytes);
@@ -160,6 +198,14 @@ class ListaProvider extends ChangeNotifier {
         importedP.id = null; // Forza a SQLite a crear una nueva llave primaria
         importedP.comprado = false; 
         
+        // Creación silente de categoría si no existe
+        final catExists = _categorias.any((c) => c.nombre.toLowerCase().trim() == importedP.categoria.toLowerCase().trim());
+        if (!catExists) {
+            final nueva = CategoriaModel(nombre: importedP.categoria, colorValue: 0xFF8D6E63, iconCode: Icons.shopping_bag_outlined.codePoint);
+            final inserted = await DBService.instance.createCategoria(nueva);
+            _categorias.add(inserted);
+        }
+
         // Suma Inteligente si ya existía el mismo producto
         final index = _productos.indexWhere((p) => p.nombre.toLowerCase().trim() == importedP.nombre.toLowerCase().trim());
         if (index != -1) {

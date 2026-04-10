@@ -149,7 +149,43 @@ class _ListaComprasViewState extends State<ListaComprasView> {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('La lista está vacía o ya compraste todo. Agrega pendientes primero.')));
                   return;
                }
-               Share.share('🛒 ¡Hola! Te comparto mi lista de supermercado. Copia todo este código y pégalo en el botón "Recibir (Flecha Minta)" de tu app SmartCart:\n\n$codigo');
+               showDialog(
+                 context: context,
+                 builder: (ctx) => AlertDialog(
+                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                   title: const Text('Compartir Lista', style: TextStyle(fontWeight: FontWeight.bold)),
+                   content: const Text(
+                      'Para evitar problemas al copiar, puedes enviar las instrucciones y el código en mensajes separados.\n\n'
+                      'Paso 1: Envía las instrucciones.\nPaso 2: Vuelve aquí y envía el código.'
+                   ),
+                   actions: [
+                     Column(
+                       crossAxisAlignment: CrossAxisAlignment.stretch,
+                       mainAxisSize: MainAxisSize.min,
+                       children: [
+                         ElevatedButton.icon(
+                           style: ElevatedButton.styleFrom(backgroundColor: kNaranja),
+                           onPressed: () {
+                             Share.share('🛒 ¡Hola! Te comparto mi lista de supermercado. Copia el siguiente código y pégalo en el botón "Recibir" de tu app SmartCart.');
+                           },
+                           icon: const Icon(Icons.looks_one, color: Colors.white, size: 20),
+                           label: const Text('Instrucciones', style: TextStyle(color: Colors.white)),
+                         ),
+                         const SizedBox(height: 8),
+                         ElevatedButton.icon(
+                           style: ElevatedButton.styleFrom(backgroundColor: kVerde),
+                           onPressed: () {
+                             Share.share(codigo);
+                           },
+                           icon: const Icon(Icons.looks_two, color: Colors.white, size: 20),
+                           label: const Text('Solo el Código', style: TextStyle(color: Colors.white)),
+                         ),
+                         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cerrar', style: TextStyle(color: Colors.grey))),
+                       ],
+                     ),
+                   ],
+                 ),
+               );
              },
           ),
           IconButton(
@@ -419,10 +455,9 @@ class _ListaComprasViewState extends State<ListaComprasView> {
     double editPrecio = p.precioEstimado;
     final nombreCtrl = TextEditingController(text: p.nombre);
 
-    final categorias = [
-      'Lácteos', 'Carnes', 'Frutas y Verduras', 'Panadería',
-      'Granos', 'Bebidas', 'Limpieza', 'Otros',
-    ];
+    final categorias = provider.categorias.isEmpty 
+        ? ['Otros'] 
+        : provider.categorias.map((c) => c.nombre).toList();
 
     showDialog(
       context: context,
@@ -480,8 +515,9 @@ class _ListaComprasViewState extends State<ListaComprasView> {
               const Text('CATEGORÍA', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                initialValue: categorias.contains(editCategoria) ? editCategoria : 'Otros',
-                items: categorias.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                isExpanded: true,
+                initialValue: categorias.contains(editCategoria) ? editCategoria : categorias.first,
+                items: categorias.map((c) => DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis))).toList(),
                 onChanged: (v) { if (v != null) setDlg(() => editCategoria = v); },
                 decoration: InputDecoration(filled: true, fillColor: kFondo, contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
               ),
