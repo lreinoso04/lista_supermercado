@@ -4,20 +4,89 @@ import '../models/producto.dart';
 import '../models/historial_compra.dart';
 import '../models/categoria_model.dart';
 import '../services/db_service.dart';
+import '../services/firebase_service.dart';
+import 'dart:async';
 
 class ListaProvider extends ChangeNotifier {
   List<Producto> _productos = [];
   List<Producto> _catalogo = [];
   List<CategoriaModel> _categorias = [];
   bool _isLoading = false;
+  String? _pinActual;
+  StreamSubscription<List<Producto>>? _subFirebase;
+  bool _isSyncing = false;
 
   List<Producto> get productos => _productos;
   List<Producto> get catalogo => _catalogo;
   List<CategoriaModel> get categorias => _categorias;
   bool get isLoading => _isLoading;
+  String? get pinActual => _pinActual;
+
+  void _syncNube() async {
+    if (_pinActual != null) {
+      _isSyncing = true;
+      await FirebaseService.instance.syncListaCompleta(_pinActual!, _productos);
+      _isSyncing = false;
+    }
+  }
+
+  Future<void> conectarFirebase(String pin) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final existe = await FirebaseService.instance.verificarPin(pin);
+      if (!existe) throw Exception('El PIN no existe.');
+
+      _pinActual = pin;
+      _subFirebase?.cancel();
+      _subFirebase = FirebaseService.instance.streamLista(pin).listen((remotos) async {
+        if (_isSyncing) return;
+        _productos.clear();
+        
+        await DBService.instance.deleteAllProductos();
+
+        for (var p in remotos) {
+          final nuevoP = await DBService.instance.create(p);
+          _productos.add(nuevoP);
+        }
+        notifyListeners();
+      });
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<String> compartirListaEnNube() async {
+    final pin = FirebaseService.instance.generarPin();
+    _pinActual = pin;
+    _syncNube();
+    
+    _subFirebase?.cancel();
+    _subFirebase = FirebaseService.instance.streamLista(pin).listen((remotos) async {
+        if (_isSyncing) return;
+        _productos.clear();
+        
+        await DBService.instance.deleteAllProductos();
+
+        for (var p in remotos) {
+          final nuevoP = await DBService.instance.create(p);
+          _productos.add(nuevoP);
+        }
+        notifyListeners();
+    });
+    notifyListeners();
+    return pin;
+  }
+
+  void desconectarFirebase() {
+    _pinActual = null;
+    _subFirebase?.cancel();
+    notifyListeners();
+  }
 
   double get gastoTotal {
-    return _productos
+    return productos
         .where((p) => p.comprado)
         .fold(0.0, (sum, p) => sum + (p.precioEstimado * p.cantidad));
   }
@@ -39,6 +108,7 @@ class ListaProvider extends ChangeNotifier {
     _productos.add(nuevoP);
     await _upsertCatalogo(nuevoP);
     notifyListeners();
+    _syncNube();
   }
 
   Future<void> toggleComprado(Producto p) async {
@@ -49,6 +119,7 @@ class ListaProvider extends ChangeNotifier {
     if (index != -1) {
       _productos[index] = p;
       notifyListeners();
+      _syncNube();
     }
   }
 
@@ -59,6 +130,7 @@ class ListaProvider extends ChangeNotifier {
       _productos[index] = p;
       await _upsertCatalogo(p);
       notifyListeners();
+      _syncNube();
     }
   }
 
@@ -78,6 +150,7 @@ class ListaProvider extends ChangeNotifier {
       await DBService.instance.delete(p.id!);
       _productos.removeWhere((item) => item.id == p.id);
       notifyListeners();
+      _syncNube();
     }
   }
 
@@ -114,6 +187,7 @@ class ListaProvider extends ChangeNotifier {
         await DBService.instance.update(p);
       }
     }
+    _syncNube();
     _isLoading = false;
     notifyListeners();
   }
@@ -121,8 +195,12 @@ class ListaProvider extends ChangeNotifier {
   Future<void> vaciarListaDesdeCero() async {
     _isLoading = true;
     notifyListeners();
-    await DBService.instance.deleteAllProductos();
-    _productos.clear();
+    final productosActuales = _productos.toList();
+    for (var p in productosActuales) {
+      await DBService.instance.delete(p.id!);
+      _productos.removeWhere((item) => item.id == p.id);
+    }
+    _syncNube();
     _isLoading = false;
     notifyListeners();
   }
@@ -133,7 +211,7 @@ class ListaProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
-    final comprados = _productos.where((p) => p.comprado).toList();
+    final comprados = productos.where((p) => p.comprado).toList();
 
     if (comprados.isNotEmpty) {
       double total = comprados.fold(0.0, (sum, p) => sum + (p.precioEstimado * p.cantidad));
@@ -159,6 +237,7 @@ class ListaProvider extends ChangeNotifier {
       
       // Removemos los items procesados de la lista local
       _productos.removeWhere((item) => item.comprado);
+      _syncNube();
     }
 
     _isLoading = false;
@@ -166,7 +245,7 @@ class ListaProvider extends ChangeNotifier {
   }
 
   String exportarListaBase64() {
-    final pendientes = _productos.where((p) => !p.comprado).toList();
+    final pendientes = productos.where((p) => !p.comprado).toList();
     if (pendientes.isEmpty) return "";
     
     final jsonString = jsonEncode(pendientes.map((p) => p.toMap()).toList());
@@ -222,6 +301,42 @@ class ListaProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint("Error importando lista: $e");
       throw Exception("El código no es válido.");
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> cargarListaDesdeHistorial(HistorialCompra h, {bool sustituir = false}) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      if (sustituir) {
+        await DBService.instance.deleteAllProductos();
+        _productos.clear();
+      }
+
+      if (h.productosJson != null && h.productosJson!.isNotEmpty) {
+        final List<dynamic> decoded = jsonDecode(h.productosJson!);
+        for (var item in decoded) {
+          final importedP = Producto.fromMap(item as Map<String, dynamic>);
+          importedP.id = null; 
+          importedP.comprado = false;
+        
+          final index = _productos.indexWhere((p) => p.nombre.toLowerCase().trim() == importedP.nombre.toLowerCase().trim());
+          if (index != -1) {
+            final pBase = _productos[index];
+            pBase.cantidad += importedP.cantidad;
+            await DBService.instance.update(pBase);
+          } else {
+            final nuevoP = await DBService.instance.create(importedP);
+            _productos.add(nuevoP);
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error cargando historial: $e");
     } finally {
       _isLoading = false;
       notifyListeners();

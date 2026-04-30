@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/producto.dart';
 import '../providers/lista_provider.dart';
 import '../theme/colors.dart';
@@ -114,6 +117,85 @@ class _ListaComprasViewState extends State<ListaComprasView> {
     super.dispose();
   }
 
+  Future<void> _enviarRecordatorioSMS(List<Producto> pendientes) async {
+    final prefs = await SharedPreferences.getInstance();
+    final bool smsActivo = prefs.getBool('perfil_notifs') ?? true;
+    final String telefono = prefs.getString('perfil_telefono') ?? "";
+
+    if (!smsActivo) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Los mensajes SMS están desactivados en tu perfil.')));
+      return;
+    }
+
+    if (telefono.isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Configura el teléfono del comprador en tu Perfil primero.')));
+      return;
+    }
+
+    if (pendientes.isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No hay productos pendientes para recordar.')));
+      return;
+    }
+
+    final sb = StringBuffer('🛒 Recordatorio SmartCart:\nTienes ${pendientes.length} productos por comprar.\n');
+    final numParaMostrar = pendientes.length > 5 ? 5 : pendientes.length;
+    for (int i=0; i<numParaMostrar; i++) {
+      sb.writeln('- ${pendientes[i].nombre} (x${pendientes[i].cantidad})');
+    }
+    if (pendientes.length > 5) sb.writeln('...y ${pendientes.length - 5} más.');
+    sb.writeln('\n¡Por favor, no lo olvides!');
+
+    final uri = Uri(scheme: 'sms', path: telefono, queryParameters: {'body': sb.toString()});
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo abrir la app de mensajes.')));
+    }
+  }
+
+  Future<void> _notificarImportacionSMS() async {
+    final prefs = await SharedPreferences.getInstance();
+    final bool smsActivo = prefs.getBool('perfil_notifs') ?? true;
+    final String telefono = prefs.getString('perfil_telefono') ?? "";
+
+    if (smsActivo && telefono.isNotEmpty) {
+      final uri = Uri(scheme: 'sms', path: telefono, queryParameters: {'body': '✅ He recibido tu código de lista en SmartCart. ¡Pronto haré la compra!'});
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      }
+    }
+  }
+
+  List<Widget> _buildCategoriasGrupos(BuildContext context, List<Producto> pendientes, ListaProvider provider) {
+    final Map<String, List<Producto>> grupos = {};
+    for (var p in pendientes) {
+      if (!grupos.containsKey(p.categoria)) grupos[p.categoria] = [];
+      grupos[p.categoria]!.add(p);
+    }
+    
+    for (var cat in grupos.keys) {
+      grupos[cat]!.sort((a, b) {
+        int pa = a.prioridad == 'Alta' ? 0 : (a.prioridad == 'Media' ? 1 : 2);
+        int pb = b.prioridad == 'Alta' ? 0 : (b.prioridad == 'Media' ? 1 : 2);
+        return pa.compareTo(pb);
+      });
+    }
+
+    final sortedKeys = grupos.keys.toList()..sort((a, b) => a.compareTo(b));
+    final widgets = <Widget>[];
+    for (var key in sortedKeys) {
+      final entryValue = grupos[key]!;
+      final cModel = provider.categorias.where((c) => c.nombre == key).firstOrNull;
+      final colorBase = cModel != null ? Color(cModel.colorValue) : Colors.blueGrey;
+      
+      widgets.add(_sectionHeader(key, entryValue.length, colorBase));
+      widgets.add(const SizedBox(height: 8));
+      widgets.addAll(entryValue.map((p) => _buildProductoCard(context, p)));
+      widgets.add(const SizedBox(height: 16));
+    }
+    return widgets;
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ListaProvider>();
@@ -126,67 +208,101 @@ class _ListaComprasViewState extends State<ListaComprasView> {
       : comprados.length / productos.length;
 
     return Scaffold(
-      backgroundColor: kFondo,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: kBlanco,
+        backgroundColor: Theme.of(context).cardColor,
+        toolbarHeight: 64, 
         title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Mi Lista 🛒', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+          const Text('SmartCart', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 24, color: kVerde)),
           Text('${productos.length} productos • ${comprados.length} comprados',
-            style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              style: const TextStyle(fontSize: 12, color: Colors.grey)),
         ]),
         actions: [
           IconButton(
              icon: const Icon(Icons.download_rounded, color: kVerdeMedio),
-             tooltip: 'Recibir Lista Externa',
-             onPressed: () => _mostrarDialogoImportar(context, provider),
+             tooltip: 'Conectarse a una lista',
+             onPressed: () {
+                final ctrl = TextEditingController();
+                showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Conectarse a una Lista ☁️'),
+                    content: TextField(
+                      controller: ctrl,
+                      decoration: const InputDecoration(hintText: 'Ingresa el PIN de 6 letras', prefixIcon: Icon(Icons.pin)),
+                      textCapitalization: TextCapitalization.characters,
+                      maxLength: 6,
+                    ),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: kVerde, foregroundColor: Colors.white),
+                        onPressed: () async {
+                           if (ctrl.text.length != 6) return;
+                           Navigator.pop(ctx);
+                           try {
+                             await provider.conectarFirebase(ctrl.text.toUpperCase());
+                             if (!context.mounted) return;
+                             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Conectado exitosamente en vivo.')));
+                           } catch (e) {
+                             if (!context.mounted) return;
+                             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+                           }
+                        },
+                        child: const Text('Conectar'),
+                      )
+                    ]
+                  )
+                );
+             }
           ),
           IconButton(
              icon: const Icon(Icons.share_rounded, color: kVerdeMedio),
              tooltip: 'Compartir mi Lista',
-             onPressed: () {
-               final codigo = provider.exportarListaBase64();
-               if (codigo.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('La lista está vacía o ya compraste todo. Agrega pendientes primero.')));
+             onPressed: () async {
+               if (provider.productos.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('La lista está vacía.')));
                   return;
                }
+               
+               String pin = provider.pinActual ?? "";
+               if (pin.isEmpty) {
+                 pin = await provider.compartirListaEnNube();
+               }
+
+               if (!context.mounted) return;
                showDialog(
                  context: context,
                  builder: (ctx) => AlertDialog(
                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                   title: const Text('Compartir Lista', style: TextStyle(fontWeight: FontWeight.bold)),
-                   content: const Text(
-                      'Para evitar problemas al copiar, puedes enviar las instrucciones y el código en mensajes separados.\n\n'
-                      'Paso 1: Envía las instrucciones.\nPaso 2: Vuelve aquí y envía el código.'
+                   title: const Text('Compartir en Vivo ☁️', style: TextStyle(fontWeight: FontWeight.bold)),
+                   content: Column(
+                     mainAxisSize: MainAxisSize.min,
+                     children: [
+                       const Text('Tus familiares pueden unirse usando este PIN en la app:'),
+                       const SizedBox(height: 16),
+                       Text(pin, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: 8, color: kNaranja), textAlign: TextAlign.center,),
+                     ],
                    ),
                    actions: [
-                     Column(
-                       crossAxisAlignment: CrossAxisAlignment.stretch,
-                       mainAxisSize: MainAxisSize.min,
-                       children: [
-                         ElevatedButton.icon(
-                           style: ElevatedButton.styleFrom(backgroundColor: kNaranja),
-                           onPressed: () {
-                             Share.share('🛒 ¡Hola! Te comparto mi lista de supermercado. Copia el siguiente código y pégalo en el botón "Recibir" de tu app SmartCart.');
-                           },
-                           icon: const Icon(Icons.looks_one, color: Colors.white, size: 20),
-                           label: const Text('Instrucciones', style: TextStyle(color: Colors.white)),
-                         ),
-                         const SizedBox(height: 8),
-                         ElevatedButton.icon(
-                           style: ElevatedButton.styleFrom(backgroundColor: kVerde),
-                           onPressed: () {
-                             Share.share(codigo);
-                           },
-                           icon: const Icon(Icons.looks_two, color: Colors.white, size: 20),
-                           label: const Text('Solo el Código', style: TextStyle(color: Colors.white)),
-                         ),
-                         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cerrar', style: TextStyle(color: Colors.grey))),
-                       ],
+                     ElevatedButton.icon(
+                       style: ElevatedButton.styleFrom(backgroundColor: kVerde),
+                       onPressed: () {
+                         Share.share('🛒 ¡Únete a mi lista de compras en SmartCart!\nAbre la app, dale a "Recibir" e ingresa este PIN: $pin');
+                       },
+                       icon: const Icon(Icons.share, color: Colors.white, size: 20),
+                       label: const Text('Enviar PIN', style: TextStyle(color: Colors.white)),
                      ),
+                     TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cerrar')),
                    ],
                  ),
                );
              },
+          ),
+          IconButton(
+            icon: const Icon(Icons.sms_rounded, color: Colors.blueAccent),
+            tooltip: 'Enviar Recordatorio SMS',
+            onPressed: () => _enviarRecordatorioSMS(pendientes),
           ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: Colors.grey),
@@ -237,37 +353,6 @@ class _ListaComprasViewState extends State<ListaComprasView> {
       body: provider.isLoading 
       ? const Center(child: CircularProgressIndicator())
       : Column(children: [
-        // Barra de progreso
-        Container(
-          color: kBlanco,
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
-          child: Column(children: [
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              const Text('Progreso', style: TextStyle(fontSize: 12, color: Colors.grey)),
-              Text('${(progreso * 100).toStringAsFixed(0)}%',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: kVerde)),
-            ]),
-            const SizedBox(height: 6),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: LinearProgressIndicator(
-                value: progreso,
-                minHeight: 8,
-                backgroundColor: kVerdeMenta,
-                valueColor: const AlwaysStoppedAnimation<Color>(kVerde),
-              ),
-            ),
-            if (provider.gastoTotal > 0) ...[
-              const SizedBox(height: 8),
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                const Text('Gasto en carrito', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
-                Text('\$${provider.gastoTotal.toStringAsFixed(2)}',
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: kVerdeMedio)),
-              ]),
-            ],
-          ]),
-        ),
-
         // Indicador TTS activo
         if (_ttsActivo)
           Container(
@@ -285,27 +370,23 @@ class _ListaComprasViewState extends State<ListaComprasView> {
         // Lista
         Expanded(
           child: productos.isEmpty
-            ? const Center(
+            ? Center(
                 child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Icon(Icons.shopping_cart_outlined, size: 72, color: Colors.grey),
-                  SizedBox(height: 16),
-                  Text('Tu lista está vacía', style: TextStyle(fontSize: 18, color: Colors.grey)),
-                  SizedBox(height: 8),
-                  Text('Usa el micrófono para agregar productos',
+                  Opacity(
+                    opacity: 0.4,
+                    child: Image.asset('assets/icon.png', height: 96, errorBuilder: (context, error, stackTrace) => const Icon(Icons.shopping_cart_outlined, size: 72, color: Colors.grey)),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Tu lista está vacía', style: TextStyle(fontSize: 18, color: Colors.grey)),
+                  const SizedBox(height: 8),
+                  const Text('Usa el micrófono para agregar productos',
                     style: TextStyle(fontSize: 13, color: Colors.grey)),
                 ]),
               )
             : ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  if (pendientes.isNotEmpty) ...[
-                    _sectionHeader('Por comprar', pendientes.length, kVerde),
-                    const SizedBox(height: 8),
-                    ...pendientes.map((p) {
-                      return _buildProductoCard(context, p);
-                    }),
-                    const SizedBox(height: 16),
-                  ],
+                  if (pendientes.isNotEmpty) ..._buildCategoriasGrupos(context, pendientes, provider),
                   if (comprados.isNotEmpty) ...[
                     _sectionHeader('Comprados ✓', comprados.length, Colors.grey),
                     const SizedBox(height: 8),
@@ -336,6 +417,38 @@ class _ListaComprasViewState extends State<ListaComprasView> {
                 ],
               ),
         ),
+
+        // Barra de progreso (Movida abajo)
+        if (productos.isNotEmpty)
+          Container(
+            color: Theme.of(context).cardColor,
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+            child: Column(children: [
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                const Text('Progreso', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                Text('${(progreso * 100).toStringAsFixed(0)}%',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: kVerde)),
+              ]),
+              const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: LinearProgressIndicator(
+                  value: progreso,
+                  minHeight: 8,
+                  backgroundColor: kVerdeMenta,
+                  valueColor: const AlwaysStoppedAnimation<Color>(kVerde),
+                ),
+              ),
+              if (provider.gastoTotal > 0) ...[
+                const SizedBox(height: 8),
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  const Text('Gasto en carrito', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                  Text('\$${provider.gastoTotal.toStringAsFixed(2)}',
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: kVerdeMedio)),
+                ]),
+              ],
+            ]),
+          ),
       ]),
     );
   }
@@ -399,53 +512,7 @@ class _ListaComprasViewState extends State<ListaComprasView> {
     );
   }
 
-  void _mostrarDialogoImportar(BuildContext context, ListaProvider provider) {
-    final ctrl = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(children: [Icon(Icons.download, color: kVerde), SizedBox(width: 8), Text('Importar Lista')]),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Pega aquí el código que te compartieron por WhatsApp o mensaje:', style: TextStyle(fontSize: 13, color: Colors.grey)),
-            const SizedBox(height: 12),
-            TextField(
-              controller: ctrl,
-              maxLines: 4,
-              decoration: InputDecoration(
-                filled: true, fillColor: kFondo,
-                hintText: 'Pega el código aquí...',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar', style: TextStyle(color: Colors.grey))),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: kVerde),
-            onPressed: () async {
-               if (ctrl.text.trim().isEmpty) return;
-               Navigator.pop(ctx);
-               try {
-                 await provider.importarListaBase64(ctrl.text.trim());
-                 if (context.mounted) {
-                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ ¡Lista importada y fusionada con éxito!'), backgroundColor: kVerde));
-                 }
-               } catch (e) {
-                 if (context.mounted) {
-                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('❌ Hubo un fallo: ${e.toString()}'), backgroundColor: Colors.red));
-                 }
-               }
-            },
-            child: const Text('Cargar', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      )
-    );
-  }
+
 
 
   void _mostrarEditarProducto(BuildContext context, Producto p, ListaProvider provider) {
@@ -596,10 +663,10 @@ class _ListaComprasViewState extends State<ListaComprasView> {
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         decoration: BoxDecoration(
-          color: p.comprado ? const Color(0xFFF9F9F9) : kBlanco,
+          color: p.comprado ? Theme.of(context).scaffoldBackgroundColor : Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
-            color: p.comprado ? Colors.grey.shade200 : kVerdeMenta,
+            color: p.comprado ? Colors.grey.withValues(alpha: 0.2) : kVerdeMenta,
             width: 1.5,
           ),
           boxShadow: p.comprado ? [] : [
@@ -611,6 +678,7 @@ class _ListaComprasViewState extends State<ListaComprasView> {
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           leading: GestureDetector(
             onTap: () {
+              HapticFeedback.lightImpact();
               context.read<ListaProvider>().toggleComprado(p);
             },
             child: AnimatedContainer(
@@ -632,7 +700,7 @@ class _ListaComprasViewState extends State<ListaComprasView> {
             style: TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: 15,
-              color: p.comprado ? Colors.grey : Colors.black87,
+              color: p.comprado ? Colors.grey : Theme.of(context).colorScheme.onSurface,
               decoration: p.comprado ? TextDecoration.lineThrough : null,
             ),
           ),
@@ -650,23 +718,30 @@ class _ListaComprasViewState extends State<ListaComprasView> {
                 style: TextStyle(fontSize: 10, color: colorPrioridad, fontWeight: FontWeight.bold)),
             ),
           ]),
-          trailing: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: kFondo,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text('×${p.cantidad}',
-                style: const TextStyle(fontWeight: FontWeight.bold, color: kVerdeMedio, fontSize: 13)),
-            ),
-            if (p.precioEstimado > 0)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text('\$${(p.precioEstimado * p.cantidad).toStringAsFixed(0)}',
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
-              ),
-          ]),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).scaffoldBackgroundColor,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text('×${p.cantidad}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: kVerdeMedio, fontSize: 13)),
+                ),
+                if (p.precioEstimado > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text('\$${(p.precioEstimado * p.cantidad).toStringAsFixed(0)}',
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                  ),
+              ]),
+              const SizedBox(width: 8),
+              Icon(Icons.edit_outlined, size: 20, color: Colors.grey.shade400),
+            ],
+          ),
         ),
       ),
     );

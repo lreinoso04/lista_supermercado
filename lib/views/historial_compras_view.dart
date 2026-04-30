@@ -4,6 +4,8 @@ import '../models/historial_compra.dart';
 import '../models/producto.dart';
 import '../services/db_service.dart';
 import '../theme/colors.dart';
+import 'package:provider/provider.dart';
+import '../providers/lista_provider.dart';
 
 class HistorialComprasView extends StatefulWidget {
   const HistorialComprasView({super.key});
@@ -43,7 +45,7 @@ class _HistorialComprasViewState extends State<HistorialComprasView> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: kBlanco,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) => DraggableScrollableSheet(
         initialChildSize: 0.6,
@@ -166,11 +168,51 @@ class _HistorialComprasViewState extends State<HistorialComprasView> {
     }
   }
 
+  void _reutilizarHistorial(BuildContext context, HistorialCompra h) {
+    if (h.productosJson == null || h.productosJson!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Esta compra no tiene productos para reutilizar.')));
+      return;
+    }
+
+    final provider = context.read<ListaProvider>();
+    final hayProductos = provider.productos.isNotEmpty;
+
+    if (hayProductos) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('¿Sustituir lista actual?'),
+          content: const Text('Ya tienes productos en tu lista de compras. Esto va a sustituir lo que está en la lista actualmente. ¿Deseas continuar?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx), 
+              child: const Text('No', style: TextStyle(color: Colors.grey))
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: kVerde),
+              onPressed: () {
+                Navigator.pop(ctx);
+                provider.cargarListaDesdeHistorial(h, sustituir: true);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lista sustituida correctamente.'), backgroundColor: kVerde));
+              },
+              child: const Text('Sí', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        )
+      );
+    } else {
+      provider.cargarListaDesdeHistorial(h, sustituir: false);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Productos agregados a la lista.'), backgroundColor: kVerde));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: kFondo,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
+        backgroundColor: Theme.of(context).cardColor,
         title: const Text('Historial de Compras', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
       body: _isLoading
@@ -188,9 +230,9 @@ class _HistorialComprasViewState extends State<HistorialComprasView> {
                   margin: const EdgeInsets.only(bottom: 12),
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: kBlanco,
+                    color: Theme.of(context).cardColor,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: kVerdeMenta, width: 1.5),
+                    border: Border.all(color: Colors.grey.withValues(alpha: 0.15), width: 1.5),
                     boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 4, offset: const Offset(0, 2))],
                   ),
                   child: Row(
@@ -201,7 +243,7 @@ class _HistorialComprasViewState extends State<HistorialComprasView> {
                           color: kVerde.withValues(alpha: 0.1),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.shopping_bag_outlined, color: kVerde),
+                        child: Image.asset('assets/icon.png', height: 24, errorBuilder: (context, error, stackTrace) => const Icon(Icons.shopping_bag_outlined, color: kVerde)),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
@@ -241,12 +283,21 @@ class _HistorialComprasViewState extends State<HistorialComprasView> {
                               ),
                               const SizedBox(width: 8),
                               GestureDetector(
+                                onTap: () => _reutilizarHistorial(context, h),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(color: kNaranja.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                                  child: const Text('Reutilizar', style: TextStyle(color: kNaranja, fontWeight: FontWeight.bold, fontSize: 12)),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              GestureDetector(
                                 onTap: () {
                                   if (h.id != null) _eliminarHistorial(h.id!, index);
                                 },
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8)),
+                                  decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
                                   child: const Text('Eliminar', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12)),
                                 ),
                               ),

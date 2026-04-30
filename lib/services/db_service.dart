@@ -23,7 +23,7 @@ class DBService {
 
     return await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -38,7 +38,8 @@ class DBService {
         cantidad INTEGER NOT NULL,
         comprado INTEGER NOT NULL,
         prioridad TEXT NOT NULL,
-        precioEstimado REAL NOT NULL DEFAULT 0.0
+        precioEstimado REAL NOT NULL DEFAULT 0.0,
+        tipoLista TEXT NOT NULL DEFAULT 'supermercado'
       )
     ''');
     
@@ -127,6 +128,13 @@ class DBService {
     }
     if (oldVersion < 5) {
       await _initCategoriasTable(db);
+    }
+    if (oldVersion < 6) {
+      try {
+        await db.execute("ALTER TABLE productos ADD COLUMN tipoLista TEXT NOT NULL DEFAULT 'supermercado'");
+      } catch (e) {
+        debugPrint("Columna tipoLista posiblemente ya existe: $e");
+      }
     }
   }
 

@@ -1,5 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
+import 'package:simple_barcode_scanner/simple_barcode_scanner.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:speech_to_text/speech_recognition_result.dart';
@@ -185,6 +189,38 @@ class _AgregarVozViewState extends State<AgregarVozView> {
     );
   }
 
+  Future<void> _escanearCodigo() async {
+    final res = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const SimpleBarcodeScanner(),
+      ),
+    );
+    if (res is String && res != '-1') {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Buscando producto...')));
+      try {
+        final url = Uri.parse('https://world.openfoodfacts.org/api/v0/product/$res.json');
+        final response = await http.get(url).timeout(const Duration(seconds: 8));
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          if (data['status'] == 1 && data['product'] != null) {
+            final nombre = data['product']['product_name_es'] ?? data['product']['product_name'] ?? '';
+            if (nombre.isNotEmpty) {
+              setState(() {
+                _textoCapturado = nombre;
+              });
+              _showGuardarDialog();
+              return;
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('Error buscando código: $e');
+      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Producto no encontrado en la base de datos.')));
+    }
+  }
+
   void _showGuardarDialog() {
     if (!mounted) return;
     final nombreProducto = _textoCapturado.trim();
@@ -192,8 +228,19 @@ class _AgregarVozViewState extends State<AgregarVozView> {
     final categoriasList = provider.categorias.isEmpty 
         ? ['Otros'] 
         : provider.categorias.map((c) => c.nombre).toList();
-    if (!categoriasList.contains(_categoriaSeleccionada)) {
-      _categoriaSeleccionada = categoriasList.first;
+
+    // Autocompletado desde el catálogo
+    final prodCatalogo = provider.catalogo.where((p) => p.nombre.toLowerCase() == nombreProducto.toLowerCase()).firstOrNull;
+    if (prodCatalogo != null) {
+      if (categoriasList.contains(prodCatalogo.categoria)) {
+        _categoriaSeleccionada = prodCatalogo.categoria;
+      }
+      _precioSeleccionado = prodCatalogo.precioEstimado;
+      _prioridadSeleccionada = prodCatalogo.prioridad;
+    } else {
+      if (!categoriasList.contains(_categoriaSeleccionada)) {
+        _categoriaSeleccionada = categoriasList.first;
+      }
     }
 
     showDialog(
@@ -322,6 +369,7 @@ class _AgregarVozViewState extends State<AgregarVozView> {
               icon: const Icon(Icons.add_shopping_cart, size: 18),
               label: const Text('Agregar a lista'),
               onPressed: () {
+                HapticFeedback.lightImpact();
                 Navigator.pop(ctx);
                 // Call Provider method here instead of callback
                 context.read<ListaProvider>().agregarProducto(Producto(
@@ -498,15 +546,31 @@ class _AgregarVozViewState extends State<AgregarVozView> {
             ),
             const SizedBox(height: 20),
             
-            TextButton.icon(
-              onPressed: _showKeyboardInput,
-              icon: const Icon(Icons.keyboard_alt_outlined, color: kBlanco, size: 20),
-              label: const Text('Escribir manualmente', style: TextStyle(color: kBlanco)),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                backgroundColor: Colors.white.withValues(alpha: 0.1),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                TextButton.icon(
+                  onPressed: _showKeyboardInput,
+                  icon: const Icon(Icons.keyboard_alt_outlined, color: kBlanco, size: 20),
+                  label: const Text('Manual', style: TextStyle(color: kBlanco)),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    backgroundColor: Colors.white.withValues(alpha: 0.1),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                TextButton.icon(
+                  onPressed: _escanearCodigo,
+                  icon: const Icon(Icons.qr_code_scanner_outlined, color: kBlanco, size: 20),
+                  label: const Text('Escanear', style: TextStyle(color: kBlanco)),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    backgroundColor: Colors.white.withValues(alpha: 0.1),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 32),
           ]),

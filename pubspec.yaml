@@ -19,6 +19,10 @@ dependencies:
   shared_preferences: ^2.3.5
   share_plus: ^10.1.3
   url_launcher: ^6.3.1
+  simple_barcode_scanner: ^0.6.0
+  http: ^1.6.0
+  firebase_core: ^4.7.0
+  cloud_firestore: ^6.3.0
 
 dev_dependencies:
   flutter_test:
@@ -29,7 +33,10 @@ dev_dependencies:
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
+  remove_alpha_ios: true
   image_path: "assets/icon.png"
+  adaptive_icon_background: "#ffffff" # Fondo blanco para Android
+  adaptive_icon_foreground: "assets/icon.png"
   min_sdk_android: 21
 
 flutter:

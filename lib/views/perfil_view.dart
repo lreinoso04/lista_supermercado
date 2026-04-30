@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/producto.dart';
+import '../models/historial_compra.dart';
+import '../services/db_service.dart';
 import '../providers/lista_provider.dart';
 import '../theme/colors.dart';
 import 'historial_compras_view.dart';
@@ -18,13 +20,21 @@ class PerfilView extends StatefulWidget {
 class _PerfilViewState extends State<PerfilView> {
   String _nombre = "Luis Reinoso";
   String _rol = "Comprador frecuente";
-  String _email = "100070497@p.uapa.edu.do";
+  String _email = "lreinoso270@gmail.com";
+  String _telefonoSMS = "";
   bool _notificacionesActivas = true;
+  List<HistorialCompra> _historial = [];
 
   @override
   void initState() {
     super.initState();
     _cargarPreferencias();
+    _cargarHistorial();
+  }
+
+  Future<void> _cargarHistorial() async {
+    final res = await DBService.instance.readAllHistorial();
+    if (mounted) setState(() { _historial = res; });
   }
 
   Future<void> _cargarPreferencias() async {
@@ -32,7 +42,16 @@ class _PerfilViewState extends State<PerfilView> {
     setState(() {
       _nombre = prefs.getString('perfil_nombre') ?? "Luis Reinoso";
       _rol = prefs.getString('perfil_rol') ?? "Comprador frecuente";
-      _email = prefs.getString('perfil_email') ?? "100070497@p.uapa.edu.do";
+      
+      final savedEmail = prefs.getString('perfil_email');
+      if (savedEmail == "100070497@p.uapa.edu.do" || savedEmail == null) {
+         _email = "lreinoso270@gmail.com";
+         prefs.setString('perfil_email', _email);
+      } else {
+         _email = savedEmail;
+      }
+      
+      _telefonoSMS = prefs.getString('perfil_telefono') ?? "";
       _notificacionesActivas = prefs.getBool('perfil_notifs') ?? true;
     });
   }
@@ -42,6 +61,7 @@ class _PerfilViewState extends State<PerfilView> {
     await prefs.setString('perfil_nombre', _nombre);
     await prefs.setString('perfil_rol', _rol);
     await prefs.setString('perfil_email', _email);
+    await prefs.setString('perfil_telefono', _telefonoSMS);
     await prefs.setBool('perfil_notifs', _notificacionesActivas);
   }
 
@@ -49,6 +69,7 @@ class _PerfilViewState extends State<PerfilView> {
     final nombreCtrl = TextEditingController(text: _nombre);
     final rolCtrl = TextEditingController(text: _rol);
     final emailCtrl = TextEditingController(text: _email);
+    final telefonoCtrl = TextEditingController(text: _telefonoSMS);
 
     showDialog(
       context: context,
@@ -60,6 +81,15 @@ class _PerfilViewState extends State<PerfilView> {
             TextField(controller: nombreCtrl, decoration: const InputDecoration(labelText: 'Nombre')),
             TextField(controller: rolCtrl, decoration: const InputDecoration(labelText: 'Rol o Título')),
             TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Correo Electrónico')),
+            TextField(
+              controller: telefonoCtrl,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Teléfono para SMS',
+                helperText: 'Destinatario de la lista que realizará la compra.',
+                helperMaxLines: 2,
+              ),
+            ),
           ]),
         ),
         actions: [
@@ -71,6 +101,7 @@ class _PerfilViewState extends State<PerfilView> {
                 _nombre = nombreCtrl.text.trim();
                 _rol = rolCtrl.text.trim();
                 _email = emailCtrl.text.trim();
+                _telefonoSMS = telefonoCtrl.text.trim();
               });
               _guardarPreferencias();
               Navigator.pop(ctx);
@@ -122,9 +153,9 @@ class _PerfilViewState extends State<PerfilView> {
     final comprados  = productos.where((p) => p.comprado).length;
     final pendientes = productos.where((p) => !p.comprado).length;
     return Scaffold(
-      backgroundColor: kFondo,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: kFondo,
+        backgroundColor: Theme.of(context).cardColor,
         title: const Text('Mi Perfil', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
         centerTitle: true,
       ),
@@ -191,7 +222,7 @@ class _PerfilViewState extends State<PerfilView> {
               width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: kVerdeMenta,
+                color: Theme.of(context).cardColor,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: kVerdeClaro.withValues(alpha: 0.5)),
               ),
@@ -203,10 +234,34 @@ class _PerfilViewState extends State<PerfilView> {
                 ),
                 const SizedBox(width: 16),
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('Dinero Gasto', style: TextStyle(fontSize: 12, color: kVerdeMedio, fontWeight: FontWeight.bold)),
+                  const Text('Gasto en curso', style: TextStyle(fontSize: 12, color: kVerdeMedio, fontWeight: FontWeight.bold)),
                   Text('\$${context.watch<ListaProvider>().gastoTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: kVerde)),
                 ]),
               ]),
+            ),
+          ],
+
+          if (_historial.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text('TENDENCIA DE GASTOS (ÚLTIMAS 5 COMPRAS)',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.2)),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              height: 150,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: _buildChartBars(),
+              ),
             ),
           ],
 
@@ -238,7 +293,7 @@ class _PerfilViewState extends State<PerfilView> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
-          color: kBlanco,
+          color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: color.withValues(alpha: 0.2)),
         ),
@@ -256,9 +311,9 @@ class _PerfilViewState extends State<PerfilView> {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: kBlanco,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE8F5E9)),
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.15)),
       ),
       child: ListTile(
         leading: Container(
@@ -280,9 +335,9 @@ class _PerfilViewState extends State<PerfilView> {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: kBlanco,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE8F5E9)),
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.15)),
       ),
       child: SwitchListTile(
         secondary: Container(
@@ -299,5 +354,36 @@ class _PerfilViewState extends State<PerfilView> {
         activeThumbColor: kVerde,
       ),
     );
+  }
+
+  List<Widget> _buildChartBars() {
+    final list = _historial.take(5).toList().reversed.toList();
+    if (list.isEmpty) return [];
+    
+    final maxTotal = list.fold<double>(0.0, (m, h) => h.total > m ? h.total : m);
+    
+    return list.map((h) {
+      final height = maxTotal > 0 ? (h.total / maxTotal) * 70 : 0.0;
+      final date = DateTime.tryParse(h.fecha);
+      final label = date != null ? '${date.day}/${date.month}' : '';
+      
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Text('\$${h.total.toStringAsFixed(0)}', style: const TextStyle(fontSize: 10, color: kVerdeMedio, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Container(
+            width: 24,
+            height: height > 0 ? height : 4,
+            decoration: BoxDecoration(
+              color: kVerde,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+        ],
+      );
+    }).toList();
   }
 }
