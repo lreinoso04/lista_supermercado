@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../models/historial_compra.dart';
 import '../models/producto.dart';
@@ -228,7 +228,7 @@ class _HistorialComprasViewState extends State<HistorialComprasView> {
                 final h = _historial[index];
                 return Container(
                   margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: Theme.of(context).cardColor,
                     borderRadius: BorderRadius.circular(16),
@@ -237,15 +237,7 @@ class _HistorialComprasViewState extends State<HistorialComprasView> {
                   ),
                   child: Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: kVerde.withValues(alpha: 0.1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Image.asset('assets/icon.png', height: 24, errorBuilder: (context, error, stackTrace) => const Icon(Icons.shopping_bag_outlined, color: kVerde)),
-                      ),
-                      const SizedBox(width: 16),
+
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,

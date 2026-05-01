@@ -496,18 +496,10 @@ class _ListaComprasViewState extends State<ListaComprasView> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Opacity(
-                                opacity: 0.4,
-                                child: Image.asset(
-                                  'assets/icon.png',
-                                  height: 96,
-                                  errorBuilder: (context, error, stackTrace) =>
-                                      const Icon(
-                                        Icons.shopping_cart_outlined,
-                                        size: 72,
-                                        color: Colors.grey,
-                                      ),
-                                ),
+                              Icon(
+                                Icons.shopping_cart_outlined,
+                                size: 96,
+                                color: Colors.grey.withValues(alpha: 0.4),
                               ),
                               const SizedBox(height: 16),
                               const Text(
