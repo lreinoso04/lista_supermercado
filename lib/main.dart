@@ -87,33 +87,115 @@ class _MainNavigationState extends State<MainNavigation> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: _pages[_index],
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        backgroundColor: Theme.of(context).cardColor,
-        indicatorColor: kVerdeMenta.withValues(alpha: 0.5),
-        onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: [
-          const NavigationDestination(
-            icon: Icon(Icons.mic_none_rounded),
-            selectedIcon: Icon(Icons.mic_rounded, color: kVerde),
-            label: 'Agregar',
+      extendBody: true,
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF7F4EB), // Color beige similar a la imagen
+              borderRadius: BorderRadius.circular(40),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.1),
+                  blurRadius: 15,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildNavItem(
+                  0,
+                  Icons.mic_none_rounded,
+                  Icons.mic_rounded,
+                  'Agregar',
+                  const Color(0xFF0D3269),
+                ),
+                _buildNavItem(
+                  1,
+                  Icons.shopping_cart_outlined,
+                  Icons.shopping_cart,
+                  'Mi Lista',
+                  const Color(0xFF0D3269),
+                ),
+                _buildNavItem(
+                  2,
+                  Icons.category_outlined,
+                  Icons.category,
+                  'Categorías',
+                  const Color(0xFF6B2D5C),
+                ),
+                _buildNavItem(
+                  3,
+                  Icons.person_outline_rounded,
+                  Icons.person_rounded,
+                  'Perfil',
+                  const Color(0xFF8B4513),
+                ),
+              ],
+            ),
           ),
-          NavigationDestination(
-            icon: Opacity(opacity: 0.5, child: Image.asset('assets/icon.png', height: 28, errorBuilder: (c,e,s) => const Icon(Icons.shopping_cart_outlined))),
-            selectedIcon: Image.asset('assets/icon.png', height: 32, errorBuilder: (c,e,s) => const Icon(Icons.shopping_cart, color: kVerde)),
-            label: 'Mi Lista',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.category_outlined),
-            selectedIcon: Icon(Icons.category, color: kVerde),
-            label: 'Categorías',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.person_outline_rounded),
-            selectedIcon: Icon(Icons.person_rounded, color: kVerde),
-            label: 'Perfil',
-          ),
-        ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem(
+    int index,
+    IconData icon,
+    IconData activeIcon,
+    String label,
+    Color activeColor, {
+    bool isLogo = false,
+  }) {
+    final isSelected = _index == index;
+
+    return GestureDetector(
+      onTap: () => setState(() => _index = index),
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutBack,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedScale(
+              scale: isSelected ? 1.15 : 1.0,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOutBack,
+              child: isLogo
+                  ? Image.asset(
+                      'assets/icon.png',
+                      height: isSelected ? 28 : 24,
+                      color: isSelected ? null : Colors.black54,
+                      colorBlendMode: isSelected ? null : BlendMode.srcIn,
+                      errorBuilder: (c, e, s) => Icon(
+                        isSelected ? activeIcon : icon,
+                        color: isSelected ? activeColor : Colors.black54,
+                        size: 26,
+                      ),
+                    )
+                  : Icon(
+                      isSelected ? activeIcon : icon,
+                      color: isSelected ? activeColor : Colors.black54,
+                      size: 26,
+                    ),
+            ),
+            const SizedBox(height: 4),
+            AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 300),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected ? activeColor : Colors.black54,
+              ),
+              child: Text(label),
+            ),
+          ],
+        ),
       ),
     );
   }

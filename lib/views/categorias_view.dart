@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/producto.dart';
 import '../models/categoria_model.dart';
@@ -27,16 +27,19 @@ class CategoriasView extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Categorías', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
       ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: kVerde,
-        tooltip: 'Crear nueva categoría',
-        onPressed: () => _mostrarDialogoCategoria(context, provider, null),
-        child: const Icon(Icons.add, color: kBlanco),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 90.0),
+        child: FloatingActionButton(
+          backgroundColor: kVerde,
+          tooltip: 'Crear nueva categoría',
+          onPressed: () => _mostrarDialogoCategoria(context, provider, null),
+          child: const Icon(Icons.add, color: kBlanco),
+        ),
       ),
       body: categorias.isEmpty 
         ? const Center(child: Text('No hay categorías guardadas', style: TextStyle(color: Colors.grey)))
         : ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
         children: categorias.map((cat) {
           final nombre = cat.nombre;
           final color  = Color(cat.colorValue);

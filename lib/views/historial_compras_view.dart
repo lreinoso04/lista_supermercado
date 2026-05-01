@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../models/historial_compra.dart';
 import '../models/producto.dart';
@@ -78,7 +78,7 @@ class _HistorialComprasViewState extends State<HistorialComprasView> {
               const SizedBox(height: 12),
               const Divider(height: 1),
               Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -222,13 +222,13 @@ class _HistorialComprasViewState extends State<HistorialComprasView> {
               child: Text('No hay compras registradas.', style: TextStyle(color: Colors.grey, fontSize: 16)),
             )
           : ListView.builder(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
               itemCount: _historial.length,
               itemBuilder: (context, index) {
                 final h = _historial[index];
                 return Container(
                   margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
                   decoration: BoxDecoration(
                     color: Theme.of(context).cardColor,
                     borderRadius: BorderRadius.circular(16),

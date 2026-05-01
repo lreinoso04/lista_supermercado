@@ -190,11 +190,12 @@ class _AgregarVozViewState extends State<AgregarVozView> {
   }
 
   Future<void> _escanearCodigo() async {
-    final res = await Navigator.push(
+    final res = await SimpleBarcodeScanner.scanBarcode(
       context,
-      MaterialPageRoute(
-        builder: (context) => const SimpleBarcodeScanner(),
-      ),
+      lineColor: '#ff6666',
+      cancelButtonText: 'Cancelar',
+      isShowFlashIcon: true,
+      scanType: ScanType.barcode,
     );
     if (res is String && res != '-1') {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Buscando producto...')));
