@@ -1,0 +1,156 @@
+{
+  "title": "Estudio de Mercado: Gestión Inteligente de Compras (SmartCart)",
+  "description": "¡Hola! Somos un equipo de emprendedores y estamos participando en un proyecto de innovación tecnológica. Nos encantaría contar con tu ayuda. Diseñamos esta breve encuesta para validar una idea de negocio que busca transformar la experiencia diaria de hacer las compras del hogar, haciéndola más rápida, eficiente y 100% inclusiva. Te tomará menos de 2 minutos completarla y tu opinión es vital para que este proyecto de emprendimiento pueda hacerse realidad. ¡Muchas gracias por tu valioso apoyo!",
+  "metadata": {
+    "designed_by": "SmartCart Entrepreneurship Team / Lurein-OptiMatrix Solutions",
+    "target_app": "SmartCart (MVP Validation)",
+    "focus_areas": ["Market Research", "MVP Validation", "Problem-Solution Fit", "Feature Priority"]
+  },
+  "sections": [
+    {
+      "id": 1,
+      "title": "SECCIÓN 1: Hábitos de Compra y Problemáticas Actuales",
+      "description": "Ayúdenos a entender cómo organiza sus compras actualmente y a qué retos se enfrenta.",
+      "questions": [
+        {
+          "number": 1,
+          "question_text": "¿Quién suele encargarse de planificar y realizar las compras del supermercado en tu hogar?",
+          "type": "multiple_choice",
+          "required": true,
+          "options": [
+            "Yo principalmente",
+            "Compartido con mi familia/pareja",
+            "Alguien externo al hogar"
+          ]
+        },
+        {
+          "number": 2,
+          "question_text": "¿Qué método utilizas más para anotar los productos que necesitas comprar?",
+          "type": "multiple_choice",
+          "required": true,
+          "options": [
+            "Lista en papel o notas físicas",
+            "Bloc de notas en el celular",
+            "Aplicaciones móviles de listas",
+            "Ninguno (confío en mi memoria)"
+          ]
+        },
+        {
+          "number": 3,
+          "question_text": "Al momento de estar en el supermercado, ¿cuál de estos problemas experimentas con mayor frecuencia?",
+          "type": "multiple_choice",
+          "required": true,
+          "options": [
+            "Olvidar algún artículo que necesitaba",
+            "Comprar cosas duplicadas o de más",
+            "Exceder el presupuesto que tenía pensado",
+            "Incomodidad para revisar la lista mientras cargo el carrito"
+          ]
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "SECCIÓN 2: Validación de las Soluciones de SmartCart",
+      "description": "Imagina una aplicación móvil gratuita que te permita armar y gestionar tus compras de la siguiente manera. Cuéntanos qué opinas:",
+      "questions": [
+        {
+          "number": 4,
+          "question_text": "¿Qué tan útil te parecería poder agregar productos a tu lista simplemente dictándolos por voz (sin tener que escribir)?",
+          "type": "linear_scale",
+          "required": true,
+          "scale": {
+            "min": 1,
+            "max": 5,
+            "labels": {
+              "min": "Nada útil",
+              "max": "Muy útil"
+            }
+          }
+        },
+        {
+          "number": 5,
+          "question_text": "¿Usarías una función que te lea la lista en voz alta para repasar tus productos mientras caminas por los pasillos sin mirar la pantalla?",
+          "type": "multiple_choice",
+          "required": true,
+          "options": [
+            "Sí, la usaría siempre",
+            "Tal vez en ocasiones",
+            "No la utilizaría"
+          ]
+        },
+        {
+          "number": 6,
+          "question_text": "¿Te interesaría que la app ordene tus productos automáticamente por pasillos/categorías (ej. lácteos, carnes, limpieza) para ahorrarte tiempo en el recorrido?",
+          "type": "multiple_choice",
+          "required": true,
+          "options": [
+            "Sí, me ahorraría mucho tiempo",
+            "Me da igual",
+            "No lo veo necesario"
+          ]
+        },
+        {
+          "number": 7,
+          "question_text": "¿Qué tan valioso sería para ti que la app calcule un presupuesto estimado de tu compra antes de llegar a la caja?",
+          "type": "linear_scale",
+          "required": true,
+          "scale": {
+            "min": 1,
+            "max": 5,
+            "labels": {
+              "min": "Poco valioso",
+              "max": "Muy valioso"
+            }
+          }
+        },
+        {
+          "number": 8,
+          "question_text": "La app funciona 100% de forma local, por lo que puedes usarla dentro del supermercado aunque no tengas internet o señal. ¿Qué opinas de esto?",
+          "type": "multiple_choice",
+          "required": true,
+          "options": [
+            "Es excelente y muy necesario",
+            "Es útil, pero no indispensable",
+            "No me es relevante"
+          ]
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "SECCIÓN 3: Intención de Uso y Adopción",
+      "description": "Finalmente, cuéntanos si estarías dispuesto/a a usar la aplicación en el futuro.",
+      "questions": [
+        {
+          "number": 9,
+          "question_text": "Si esta aplicación estuviera disponible hoy mismo en las tiendas (Google Play / App Store), ¿la descargarías para probarla?",
+          "type": "multiple_choice",
+          "required": true,
+          "options": [
+            "Sí, definitivamente",
+            "Tal vez lo consideraría",
+            "No la descargaría"
+          ]
+        },
+        {
+          "number": 10,
+          "question_text": "En un futuro, ¿qué característica adicional haría que uses esta app todos los días?",
+          "type": "checkboxes",
+          "required": false,
+          "options": [
+            "Escanear el código de barra de los productos en casa",
+            "Comparar los precios entre diferentes supermercados",
+            "Compartir y editar la lista con mi familia en tiempo real"
+          ]
+        },
+        {
+          "number": 11,
+          "question_text": "¿Tienes alguna sugerencia o idea que debamos tomar en cuenta para este proyecto de emprendimiento?",
+          "type": "paragraph",
+          "required": false
+        }
+      ]
+    }
+  ]
+}

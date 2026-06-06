@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:share_plus/share_plus.dart';
@@ -20,6 +20,20 @@ class _ListaComprasViewState extends State<ListaComprasView> {
   final FlutterTts _tts = FlutterTts();
   bool _ttsActivo = false;
   bool _ttsPausado = false;
+
+  String? _extraerPin(String input) {
+    final cleanInput = input.trim();
+    if (cleanInput.length == 6 && RegExp(r'^[A-Za-z0-9]+$').hasMatch(cleanInput)) {
+      return cleanInput.toUpperCase();
+    }
+    // Buscar un bloque de exactamente 6 caracteres alfanuméricos en el texto
+    final regex = RegExp(r'\b[A-Za-z0-9]{6}\b');
+    final matches = regex.allMatches(cleanInput);
+    if (matches.isNotEmpty) {
+      return matches.first.group(0)?.toUpperCase();
+    }
+    return null;
+  }
 
   @override
   void initState() {
@@ -277,11 +291,10 @@ class _ListaComprasViewState extends State<ListaComprasView> {
                   content: TextField(
                     controller: ctrl,
                     decoration: const InputDecoration(
-                      hintText: 'Ingresa el PIN de 6 letras',
+                      hintText: 'Ingresa el PIN de 6 letras o código de lista',
                       prefixIcon: Icon(Icons.pin),
                     ),
                     textCapitalization: TextCapitalization.characters,
-                    maxLength: 6,
                   ),
                   actions: [
                     TextButton(
@@ -294,25 +307,65 @@ class _ListaComprasViewState extends State<ListaComprasView> {
                         foregroundColor: Colors.white,
                       ),
                       onPressed: () async {
-                        if (ctrl.text.length != 6) return;
+                        final String rawInput = ctrl.text.trim();
+                        if (rawInput.isEmpty) return;
+
                         Navigator.pop(ctx);
-                        try {
-                          await provider.conectarFirebase(
-                            ctrl.text.toUpperCase(),
-                          );
+                        
+                        // 1. Detectar si es un código Base64 (listas exportadas)
+                        if (rawInput.length > 15) {
+                          try {
+                            await provider.importarListaBase64(rawInput);
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('✅ Lista importada localmente con éxito.'),
+                                backgroundColor: kVerde,
+                              ),
+                            );
+                            return;
+                          } catch (e) {
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Error al importar la lista: ${e.toString()}'),
+                                backgroundColor: Colors.redAccent,
+                              ),
+                            );
+                            return;
+                          }
+                        }
+
+                        // 2. Si es corto, extraer un PIN de 6 caracteres
+                        final String? pin = _extraerPin(rawInput);
+                        if (pin == null || pin.length != 6) {
                           if (!context.mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text(
-                                '✅ Conectado exitosamente en vivo.',
-                              ),
+                              content: Text('Error: No se encontró ningún PIN válido de 6 caracteres en el texto.'),
+                              backgroundColor: Colors.redAccent,
+                            ),
+                          );
+                          return;
+                        }
+
+                        try {
+                          await provider.conectarFirebase(pin);
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('✅ Conectado exitosamente en vivo.'),
+                              backgroundColor: kVerde,
                             ),
                           );
                         } catch (e) {
                           if (!context.mounted) return;
-                          ScaffoldMessenger.of(
-                            context,
-                          ).showSnackBar(SnackBar(content: Text(e.toString())));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(e.toString()),
+                              backgroundColor: Colors.redAccent,
+                            ),
+                          );
                         }
                       },
                       child: const Text('Conectar'),

@@ -1,8 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/producto.dart';
 import '../models/historial_compra.dart';
 import '../services/db_service.dart';
@@ -22,8 +25,18 @@ class _PerfilViewState extends State<PerfilView> {
   String _rol = "Comprador frecuente";
   String _email = "lreinoso270@gmail.com";
   String _telefonoSMS = "";
+  String _emoji = "👤";
+  String? _fotoPath;
   bool _notificacionesActivas = true;
   List<HistorialCompra> _historial = [];
+
+  static const List<String> _emojisDisponibles = [
+    '👤', '🧑', '👨', '👩', '👴', '👵', '👶', 
+    '🧑‍⚕️', '🧑‍🎓', '🧑‍🏫', '🧑‍⚖️', '🧑‍🌾', '🧑‍🍳', 
+    '🧑‍🔧', '🧑‍🏭', '🧑‍💼', '🧑‍🔬', '🧑‍💻', '🧑‍🎤', 
+    '🧑‍🎨', '🧑‍✈️', '🧑‍🚀', '🧑‍🚒', '👮', '🕵️', 
+    '💂', '🥷', '🦸', '🦹'
+  ];
 
   @override
   void initState() {
@@ -42,6 +55,8 @@ class _PerfilViewState extends State<PerfilView> {
     setState(() {
       _nombre = prefs.getString('perfil_nombre') ?? "Luis Reinoso";
       _rol = prefs.getString('perfil_rol') ?? "Comprador frecuente";
+      _emoji = prefs.getString('perfil_emoji') ?? "👤";
+      _fotoPath = prefs.getString('perfil_foto_path');
       
       final savedEmail = prefs.getString('perfil_email');
       if (savedEmail == "100070497@p.uapa.edu.do" || savedEmail == null) {
@@ -62,6 +77,12 @@ class _PerfilViewState extends State<PerfilView> {
     await prefs.setString('perfil_rol', _rol);
     await prefs.setString('perfil_email', _email);
     await prefs.setString('perfil_telefono', _telefonoSMS);
+    await prefs.setString('perfil_emoji', _emoji);
+    if (_fotoPath != null) {
+      await prefs.setString('perfil_foto_path', _fotoPath!);
+    } else {
+      await prefs.remove('perfil_foto_path');
+    }
     await prefs.setBool('perfil_notifs', _notificacionesActivas);
   }
 
@@ -70,45 +91,170 @@ class _PerfilViewState extends State<PerfilView> {
     final rolCtrl = TextEditingController(text: _rol);
     final emailCtrl = TextEditingController(text: _email);
     final telefonoCtrl = TextEditingController(text: _telefonoSMS);
+    String selectedEmoji = _emoji;
+    String? selectedFotoPath = _fotoPath;
+    final picker = ImagePicker();
+
+    Future<void> pickImage(StateSetter setStateDialog) async {
+      try {
+        final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+        if (image != null) {
+          final directory = await getApplicationDocumentsDirectory();
+          final String path = directory.path;
+          final fileName = 'perfil_${DateTime.now().millisecondsSinceEpoch}.jpg';
+          final File localFile = await File(image.path).copy('$path/$fileName');
+          
+          setStateDialog(() {
+            selectedFotoPath = localFile.path;
+          });
+        }
+      } catch (e) {
+        debugPrint("Error al seleccionar imagen: $e");
+      }
+    }
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Editar Perfil', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(controller: nombreCtrl, decoration: const InputDecoration(labelText: 'Nombre')),
-            TextField(controller: rolCtrl, decoration: const InputDecoration(labelText: 'Rol o Título')),
-            TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Correo Electrónico')),
-            TextField(
-              controller: telefonoCtrl,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                labelText: 'Teléfono para SMS',
-                helperText: 'Destinatario de la lista que realizará la compra.',
-                helperMaxLines: 2,
-              ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setStateDialog) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Editar Perfil', style: TextStyle(fontWeight: FontWeight.bold)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Vista previa de Foto / Emoji
+                Center(
+                  child: CircleAvatar(
+                    radius: 44,
+                    backgroundColor: kVerdeMenta,
+                    backgroundImage: selectedFotoPath != null ? FileImage(File(selectedFotoPath!)) : null,
+                    child: selectedFotoPath == null
+                        ? Text(
+                            selectedEmoji,
+                            style: const TextStyle(fontSize: 44),
+                          )
+                        : null,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                
+                // Botones para subir foto o eliminar
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: kVerdeMenta,
+                        foregroundColor: kVerde,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () => pickImage(setStateDialog),
+                      icon: const Icon(Icons.photo_library_outlined, size: 16),
+                      label: const Text('Galería', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
+                    if (selectedFotoPath != null) ...[
+                      const SizedBox(width: 8),
+                      TextButton.icon(
+                        style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+                        onPressed: () {
+                          setStateDialog(() {
+                            selectedFotoPath = null;
+                          });
+                        },
+                        icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                        label: const Text('Usar Emoji', style: TextStyle(fontSize: 12)),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Selecciona un Emoji de Avatar:',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.withValues(alpha: 0.15)),
+                  ),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    alignment: WrapAlignment.center,
+                    children: _emojisDisponibles.map((em) {
+                      final isSelected = em == selectedEmoji;
+                      return GestureDetector(
+                        onTap: () {
+                          setStateDialog(() {
+                            selectedEmoji = em;
+                            selectedFotoPath = null; 
+                          });
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: isSelected ? kVerde.withValues(alpha: 0.15) : Colors.transparent,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: isSelected ? kVerde : Colors.transparent,
+                              width: 2,
+                            ),
+                          ),
+                          child: Text(
+                            em,
+                            style: const TextStyle(fontSize: 24),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(controller: nombreCtrl, decoration: const InputDecoration(labelText: 'Nombre')),
+                TextField(controller: rolCtrl, decoration: const InputDecoration(labelText: 'Rol o Título')),
+                TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Correo Electrónico')),
+                TextField(
+                  controller: telefonoCtrl,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Teléfono para SMS',
+                    helperText: 'Destinatario de la lista que realizará la compra.',
+                    helperMaxLines: 2,
+                  ),
+                ),
+              ],
             ),
-          ]),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: kVerde),
-            onPressed: () {
-              setState(() {
-                _nombre = nombreCtrl.text.trim();
-                _rol = rolCtrl.text.trim();
-                _email = emailCtrl.text.trim();
-                _telefonoSMS = telefonoCtrl.text.trim();
-              });
-              _guardarPreferencias();
-              Navigator.pop(ctx);
-            },
-            child: const Text('Guardar', style: TextStyle(color: Colors.white)),
           ),
-        ],
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: kVerde),
+              onPressed: () {
+                setState(() {
+                  _emoji = selectedEmoji;
+                  _fotoPath = selectedFotoPath;
+                  _nombre = nombreCtrl.text.trim();
+                  _rol = rolCtrl.text.trim();
+                  _email = emailCtrl.text.trim();
+                  _telefonoSMS = telefonoCtrl.text.trim();
+                });
+                _guardarPreferencias();
+                Navigator.pop(ctx);
+              },
+              child: const Text('Guardar', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -173,9 +319,16 @@ class _PerfilViewState extends State<PerfilView> {
                     shape: BoxShape.circle,
                     border: Border.all(color: kVerde, width: 3),
                   ),
-                  child: const CircleAvatar(
+                  child: CircleAvatar(
                     radius: 50,
-                    backgroundImage: AssetImage('assets/foto_luis.jpg'),
+                    backgroundColor: Theme.of(context).cardColor,
+                    backgroundImage: _fotoPath != null && _fotoPath!.isNotEmpty ? FileImage(File(_fotoPath!)) : null,
+                    child: (_fotoPath == null || _fotoPath!.isEmpty)
+                        ? Text(
+                            _emoji,
+                            style: const TextStyle(fontSize: 52),
+                          )
+                        : null,
                   ),
                 ),
               ),
