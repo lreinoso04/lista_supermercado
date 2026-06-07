@@ -30,6 +30,74 @@ class ListaProvider extends ChangeNotifier {
     }
   }
 
+  void _escucharCambiosFirebase(String pin) {
+    _subFirebase?.cancel();
+    _subFirebase = FirebaseService.instance.streamLista(pin).listen((remotos) async {
+      if (_isSyncing) return;
+
+      final locales = await DBService.instance.readAllProductos();
+      final localMap = {for (var p in locales) p.id: p};
+      final remotosIds = remotos.map((r) => r.id).whereType<int>().toSet();
+
+      bool cambio = false;
+
+      // 1. Eliminar de local lo que no está en remoto
+      for (var l in locales) {
+        if (l.id != null && !remotosIds.contains(l.id)) {
+          await DBService.instance.delete(l.id!);
+          _productos.removeWhere((p) => p.id == l.id);
+          cambio = true;
+        }
+      }
+
+      // 2. Agregar o actualizar locales con los remotos
+      for (var r in remotos) {
+        if (r.id == null) {
+          final nuevoP = await DBService.instance.create(r);
+          _productos.add(nuevoP);
+          cambio = true;
+          continue;
+        }
+
+        final localProd = localMap[r.id];
+        if (localProd != null) {
+          // Existe en local, verificar si hay cambios
+          if (localProd.nombre != r.nombre ||
+              localProd.comprado != r.comprado ||
+              localProd.cantidad != r.cantidad ||
+              localProd.prioridad != r.prioridad ||
+              localProd.precioEstimado != r.precioEstimado ||
+              localProd.categoria != r.categoria) {
+            
+            localProd.nombre = r.nombre;
+            localProd.comprado = r.comprado;
+            localProd.cantidad = r.cantidad;
+            localProd.prioridad = r.prioridad;
+            localProd.precioEstimado = r.precioEstimado;
+            localProd.categoria = r.categoria;
+
+            await DBService.instance.update(localProd);
+
+            final idx = _productos.indexWhere((p) => p.id == localProd.id);
+            if (idx != -1) {
+              _productos[idx] = localProd;
+            }
+            cambio = true;
+          }
+        } else {
+          // No existe en local, crear
+          final nuevoP = await DBService.instance.create(r);
+          _productos.add(nuevoP);
+          cambio = true;
+        }
+      }
+
+      if (cambio) {
+        notifyListeners();
+      }
+    });
+  }
+
   Future<void> conectarFirebase(String pin) async {
     _isLoading = true;
     notifyListeners();
@@ -38,19 +106,11 @@ class ListaProvider extends ChangeNotifier {
       if (!existe) throw Exception('El PIN no existe.');
 
       _pinActual = pin;
-      _subFirebase?.cancel();
-      _subFirebase = FirebaseService.instance.streamLista(pin).listen((remotos) async {
-        if (_isSyncing) return;
-        _productos.clear();
-        
-        await DBService.instance.deleteAllProductos();
+      _productos.clear();
+      await DBService.instance.deleteAllProductos();
+      notifyListeners();
 
-        for (var p in remotos) {
-          final nuevoP = await DBService.instance.create(p);
-          _productos.add(nuevoP);
-        }
-        notifyListeners();
-      });
+      _escucharCambiosFirebase(pin);
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -62,19 +122,7 @@ class ListaProvider extends ChangeNotifier {
     _pinActual = pin;
     _syncNube();
     
-    _subFirebase?.cancel();
-    _subFirebase = FirebaseService.instance.streamLista(pin).listen((remotos) async {
-        if (_isSyncing) return;
-        _productos.clear();
-        
-        await DBService.instance.deleteAllProductos();
-
-        for (var p in remotos) {
-          final nuevoP = await DBService.instance.create(p);
-          _productos.add(nuevoP);
-        }
-        notifyListeners();
-    });
+    _escucharCambiosFirebase(pin);
     notifyListeners();
     return pin;
   }

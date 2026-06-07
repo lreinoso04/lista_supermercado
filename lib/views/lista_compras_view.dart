@@ -22,17 +22,9 @@ class _ListaComprasViewState extends State<ListaComprasView> {
   bool _ttsPausado = false;
 
   String? _extraerPin(String input) {
-    final cleanInput = input.trim();
-    if (cleanInput.length == 6 && RegExp(r'^[A-Za-z0-9]+$').hasMatch(cleanInput)) {
-      return cleanInput.toUpperCase();
-    }
-    // Buscar un bloque de exactamente 6 caracteres alfanuméricos en el texto
-    final regex = RegExp(r'\b[A-Za-z0-9]{6}\b');
-    final matches = regex.allMatches(cleanInput);
-    if (matches.isNotEmpty) {
-      return matches.first.group(0)?.toUpperCase();
-    }
-    return null;
+    final regex = RegExp(r'\b[0-9]{4}\b'); 
+    final match = regex.firstMatch(input);
+    return match?.group(0);
   }
 
   @override
@@ -291,7 +283,7 @@ class _ListaComprasViewState extends State<ListaComprasView> {
                   content: TextField(
                     controller: ctrl,
                     decoration: const InputDecoration(
-                      hintText: 'Ingresa el PIN de 6 letras o código de lista',
+                      hintText: 'Ingresa el PIN de 4 números o código de lista',
                       prefixIcon: Icon(Icons.pin),
                     ),
                     textCapitalization: TextCapitalization.characters,
@@ -336,13 +328,13 @@ class _ListaComprasViewState extends State<ListaComprasView> {
                           }
                         }
 
-                        // 2. Si es corto, extraer un PIN de 6 caracteres
+                        // 2. Si es corto, extraer un PIN de 4 caracteres
                         final String? pin = _extraerPin(rawInput);
-                        if (pin == null || pin.length != 6) {
+                        if (pin == null || pin.length != 4) {
                           if (!context.mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('Error: No se encontró ningún PIN válido de 6 caracteres en el texto.'),
+                              content: Text('Error: No se encontró ningún PIN válido de 4 números en el texto.'),
                               backgroundColor: Colors.redAccent,
                             ),
                           );

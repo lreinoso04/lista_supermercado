@@ -9,10 +9,10 @@ class FirebaseService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   String generarPin() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    const chars = '0123456789';
     final rnd = Random();
     return String.fromCharCodes(Iterable.generate(
-      6, (_) => chars.codeUnitAt(rnd.nextInt(chars.length))));
+      4, (_) => chars.codeUnitAt(rnd.nextInt(chars.length))));
   }
 
   Stream<List<Producto>> streamLista(String pin) {
