@@ -652,12 +652,7 @@ class _ListaComprasViewState extends State<ListaComprasView> {
                 if (productos.isNotEmpty)
                   Container(
                     color: Theme.of(context).cardColor,
-                    padding: EdgeInsets.fromLTRB(
-                      20,
-                      16,
-                      20,
-                      kAlturaBarra + MediaQuery.of(context).padding.bottom + 16,
-                    ),
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
                     child: Column(
                       children: [
                         Row(
@@ -719,6 +714,8 @@ class _ListaComprasViewState extends State<ListaComprasView> {
                       ],
                     ),
                   ),
+                if (productos.isNotEmpty)
+                  SizedBox(height: MediaQuery.of(context).padding.bottom - 10),
               ],
             ),
     );

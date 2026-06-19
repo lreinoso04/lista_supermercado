@@ -77,6 +77,7 @@ class _MainNavigationState extends State<MainNavigation> {
       body: _pages[_index],
       extendBody: true,
       bottomNavigationBar: SafeArea(
+        bottom: false,
         child: Padding(
           padding: EdgeInsets.only(
             left: 20,

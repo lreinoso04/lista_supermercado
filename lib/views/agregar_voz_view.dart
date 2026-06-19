@@ -883,7 +883,7 @@ class _AgregarVozViewState extends State<AgregarVozView> {
                   ),
                 ],
               ),
-              SizedBox(height: kAlturaBarra + MediaQuery.of(context).padding.bottom + 16),
+              SizedBox(height: MediaQuery.of(context).padding.bottom),
             ],
           ),
         ),

@@ -316,7 +316,7 @@ class _PerfilViewState extends State<PerfilView> {
           20, 
           20, 
           20, 
-          kAlturaBarra + MediaQuery.of(context).padding.bottom + 16,
+          MediaQuery.of(context).padding.bottom + 16,
         ),
         child: Column(children: [
 

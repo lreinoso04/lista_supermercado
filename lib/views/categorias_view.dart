@@ -30,7 +30,7 @@ class CategoriasView extends StatelessWidget {
       ),
       floatingActionButton: Padding(
         padding: EdgeInsets.only(
-          bottom: kAlturaBarra + MediaQuery.of(context).padding.bottom + 16,
+          bottom: MediaQuery.of(context).padding.bottom + 16,
         ),
         child: FloatingActionButton(
           backgroundColor: kVerde,
@@ -46,7 +46,7 @@ class CategoriasView extends StatelessWidget {
           16, 
           16, 
           16, 
-          kAlturaBarra + MediaQuery.of(context).padding.bottom + 16,
+          MediaQuery.of(context).padding.bottom + 16,
         ),
         children: categorias.map((cat) {
           final nombre = cat.nombre;
