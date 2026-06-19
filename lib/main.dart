@@ -36,7 +36,7 @@ class MarketApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'SmartCart',
-      themeMode: ThemeMode.system,
+      themeMode: ThemeMode.light,
       theme: ThemeData(
         useMaterial3: true,
         colorSchemeSeed: kVerde,
@@ -46,18 +46,6 @@ class MarketApp extends StatelessWidget {
         appBarTheme: const AppBarTheme(
           backgroundColor: kBlanco,
           surfaceTintColor: kBlanco,
-          elevation: 0,
-        ),
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: kVerde,
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF121212),
-        cardTheme: const CardThemeData(elevation: 0, color: Color(0xFF1E1E1E)),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF121212),
-          surfaceTintColor: Color(0xFF1E1E1E),
           elevation: 0,
         ),
       ),
@@ -90,7 +78,12 @@ class _MainNavigationState extends State<MainNavigation> {
       extendBody: true,
       bottomNavigationBar: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 12,
+            bottom: 12 + MediaQuery.of(context).padding.bottom,
+          ),
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
             decoration: BoxDecoration(

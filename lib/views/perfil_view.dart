@@ -11,6 +11,7 @@ import '../models/historial_compra.dart';
 import '../services/db_service.dart';
 import '../providers/lista_provider.dart';
 import '../theme/colors.dart';
+import '../theme/constants.dart';
 import 'historial_compras_view.dart';
 
 class PerfilView extends StatefulWidget {
@@ -256,7 +257,12 @@ class _PerfilViewState extends State<PerfilView> {
           ],
         ),
       ),
-    );
+    ).then((_) {
+      nombreCtrl.dispose();
+      rolCtrl.dispose();
+      emailCtrl.dispose();
+      telefonoCtrl.dispose();
+    });
   }
 
   void _compartirLista(List<Producto> productos) {
@@ -306,7 +312,12 @@ class _PerfilViewState extends State<PerfilView> {
         centerTitle: true,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.fromLTRB(
+          20, 
+          20, 
+          20, 
+          kAlturaBarra + MediaQuery.of(context).padding.bottom + 16,
+        ),
         child: Column(children: [
 
           // Avatar + nombre

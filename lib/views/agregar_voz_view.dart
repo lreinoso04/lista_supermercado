@@ -10,6 +10,7 @@ import 'package:speech_to_text/speech_recognition_result.dart';
 import '../models/producto.dart';
 import '../providers/lista_provider.dart';
 import '../theme/colors.dart';
+import '../theme/constants.dart';
 
 class AgregarVozView extends StatefulWidget {
   const AgregarVozView({super.key});
@@ -92,8 +93,9 @@ class _AgregarVozViewState extends State<AgregarVozView> {
   }
 
   Future<void> _restartListening() async {
-    if (!mounted || !_isRecording || !_speechAvailable || _speech.isListening)
+    if (!mounted || !_isRecording || !_speechAvailable || _speech.isListening) {
       return;
+    }
     await _speech.listen(
       onResult: _onResult,
       localeId: _localeId.isNotEmpty ? _localeId : null,
@@ -244,10 +246,11 @@ class _AgregarVozViewState extends State<AgregarVozView> {
       scanType: ScanType.barcode,
     );
     if (res is String && res != '-1') {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Buscando producto...')));
+      }
       try {
         final url = Uri.parse(
           'https://world.openfoodfacts.org/api/v0/product/$res.json',
@@ -274,12 +277,13 @@ class _AgregarVozViewState extends State<AgregarVozView> {
       } catch (e) {
         debugPrint('Error buscando código: $e');
       }
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Producto no encontrado en la base de datos.'),
           ),
         );
+      }
     }
   }
 
@@ -404,8 +408,9 @@ class _AgregarVozViewState extends State<AgregarVozView> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     _btnCantidad(Icons.remove, () {
-                      if (_cantidadSeleccionada > 1)
+                      if (_cantidadSeleccionada > 1) {
                         setDlg(() => _cantidadSeleccionada--);
+                      }
                     }),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -635,11 +640,13 @@ class _AgregarVozViewState extends State<AgregarVozView> {
     return Scaffold(
       backgroundColor: kVerde,
       body: SafeArea(
+        bottom: false,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Column(
+            mainAxisSize: MainAxisSize.max,
             children: [
-              const SizedBox(height: 30),
+              const SizedBox(height: 16),
 
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -692,21 +699,25 @@ class _AgregarVozViewState extends State<AgregarVozView> {
                 ],
               ),
 
-              const SizedBox(height: 32),
+              const Spacer(flex: 2),
 
-              Text(
-                time,
-                style: const TextStyle(
-                  color: kBlanco,
-                  fontSize: 72,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 4,
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  time,
+                  style: const TextStyle(
+                    color: kBlanco,
+                    fontSize: 72,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 4,
+                  ),
                 ),
               ),
 
-              const SizedBox(height: 24),
+              const Spacer(flex: 2),
 
               Expanded(
+                flex: 10,
                 child: Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(20),
@@ -720,7 +731,7 @@ class _AgregarVozViewState extends State<AgregarVozView> {
                   child: _isInitializing
                       ? const Center(
                           child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               CircularProgressIndicator(color: Colors.white54),
                               SizedBox(height: 16),
@@ -735,32 +746,37 @@ class _AgregarVozViewState extends State<AgregarVozView> {
                           ),
                         )
                       : _textoCapturado.isEmpty
-                      ? Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              _isRecording
-                                  ? Icons.graphic_eq
-                                  : Icons.shopping_basket_outlined,
-                              color: Colors.white38,
-                              size: 60,
+                      ? Center(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  _isRecording
+                                      ? Icons.graphic_eq
+                                      : Icons.list_alt,
+                                  color: Colors.white38,
+                                  size: 60,
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  _isRecording
+                                      ? 'Di el nombre del producto...\n"Leche", "Arroz", "Pollo"...'
+                                      : _speechAvailable
+                                      ? 'Toca el micrófono y di\nqué necesitas comprar'
+                                      : '⚠ Servicio de voz\nno disponible',
+                                  style: TextStyle(
+                                    color: _speechAvailable
+                                        ? Colors.white54
+                                        : Colors.orangeAccent,
+                                    fontSize: 15,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 16),
-                            Text(
-                              _isRecording
-                                  ? 'Di el nombre del producto...\n"Leche", "Arroz", "Pollo"...'
-                                  : _speechAvailable
-                                  ? 'Toca el micrófono y di\nqué necesitas comprar'
-                                  : '⚠ Servicio de voz\nno disponible',
-                              style: TextStyle(
-                                color: _speechAvailable
-                                    ? Colors.white54
-                                    : Colors.orangeAccent,
-                                fontSize: 15,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
+                          ),
                         )
                       : SingleChildScrollView(
                           reverse: true,
@@ -776,7 +792,7 @@ class _AgregarVozViewState extends State<AgregarVozView> {
                 ),
               ),
 
-              const SizedBox(height: 36),
+              const Spacer(flex: 3),
 
               GestureDetector(
                 onTap: _isInitializing ? null : _toggleRecording,
@@ -806,7 +822,7 @@ class _AgregarVozViewState extends State<AgregarVozView> {
                 ),
               ),
 
-              const SizedBox(height: 12),
+              const Spacer(flex: 1),
               Text(
                 _isInitializing
                     ? 'Espera...'
@@ -815,7 +831,7 @@ class _AgregarVozViewState extends State<AgregarVozView> {
                           : 'Toca para iniciar'),
                 style: const TextStyle(color: Colors.white60, fontSize: 13),
               ),
-              const SizedBox(height: 20),
+              const Spacer(flex: 2),
 
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -867,7 +883,7 @@ class _AgregarVozViewState extends State<AgregarVozView> {
                   ),
                 ],
               ),
-              const SizedBox(height: 32),
+              SizedBox(height: kAlturaBarra + MediaQuery.of(context).padding.bottom + 16),
             ],
           ),
         ),

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:provider/provider.dart';
@@ -8,6 +7,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/producto.dart';
 import '../providers/lista_provider.dart';
 import '../theme/colors.dart';
+import '../theme/constants.dart';
+import '../widgets/producto_card.dart';
+import '../widgets/section_header.dart';
 
 class ListaComprasView extends StatefulWidget {
   const ListaComprasView({super.key});
@@ -229,9 +231,14 @@ class _ListaComprasViewState extends State<ListaComprasView> {
           ? Color(cModel.colorValue)
           : Colors.blueGrey;
 
-      widgets.add(_sectionHeader(key, entryValue.length, colorBase));
+      widgets.add(SectionHeader(title: key, count: entryValue.length, color: colorBase));
       widgets.add(const SizedBox(height: 8));
-      widgets.addAll(entryValue.map((p) => _buildProductoCard(context, p)));
+      widgets.addAll(entryValue.map((p) => ProductoCard(
+        producto: p,
+        onTapEdit: () => _mostrarEditarProducto(context, p, provider),
+        onToggleComprado: () => context.read<ListaProvider>().toggleComprado(p),
+        onDismissed: () => context.read<ListaProvider>().eliminarProducto(p),
+      )));
       widgets.add(const SizedBox(height: 16));
     }
     return widgets;
@@ -566,7 +573,12 @@ class _ListaComprasViewState extends State<ListaComprasView> {
                           ),
                         )
                       : ListView(
-                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+                          padding: const EdgeInsets.fromLTRB(
+                            16,
+                            16,
+                            16,
+                            24,
+                          ),
                           children: [
                             if (pendientes.isNotEmpty)
                               ..._buildCategoriasGrupos(
@@ -575,14 +587,19 @@ class _ListaComprasViewState extends State<ListaComprasView> {
                                 provider,
                               ),
                             if (comprados.isNotEmpty) ...[
-                              _sectionHeader(
-                                'Comprados ✓',
-                                comprados.length,
-                                Colors.grey,
+                              SectionHeader(
+                                title: 'Comprados ✓',
+                                count: comprados.length,
+                                color: Colors.grey,
                               ),
                               const SizedBox(height: 8),
                               ...comprados.map((p) {
-                                return _buildProductoCard(context, p);
+                                return ProductoCard(
+                                  producto: p,
+                                  onTapEdit: () => _mostrarEditarProducto(context, p, provider),
+                                  onToggleComprado: () => context.read<ListaProvider>().toggleComprado(p),
+                                  onDismissed: () => context.read<ListaProvider>().eliminarProducto(p),
+                                );
                               }),
                             ],
                             const SizedBox(height: 24),
@@ -635,7 +652,12 @@ class _ListaComprasViewState extends State<ListaComprasView> {
                 if (productos.isNotEmpty)
                   Container(
                     color: Theme.of(context).cardColor,
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                    padding: EdgeInsets.fromLTRB(
+                      20,
+                      16,
+                      20,
+                      kAlturaBarra + MediaQuery.of(context).padding.bottom + 16,
+                    ),
                     child: Column(
                       children: [
                         Row(
@@ -702,36 +724,7 @@ class _ListaComprasViewState extends State<ListaComprasView> {
     );
   }
 
-  Widget _sectionHeader(String title, int count, Color color) {
-    return Row(
-      children: [
-        Text(
-          title,
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
-            color: color,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Text(
-            '$count',
-            style: TextStyle(
-              fontSize: 12,
-              color: color,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+
 
   void _mostrarConfirmacionReinicio(
     BuildContext context,
@@ -1073,184 +1066,10 @@ class _ListaComprasViewState extends State<ListaComprasView> {
           ],
         ),
       ),
-    );
+    ).then((_) {
+      nombreCtrl.dispose();
+    });
   }
 
-  Widget _buildProductoCard(BuildContext context, Producto p) {
-    final colorPrioridad = p.prioridad == 'Alta'
-        ? kNaranja
-        : (p.prioridad == 'Media' ? kAmarillo : kVerdeClaro);
-    final iconoCategoria = _iconoCategoria(p.categoria);
 
-    return Dismissible(
-      key: Key('prod_${p.id}_${p.nombre}'),
-      direction: DismissDirection.endToStart,
-      background: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        margin: const EdgeInsets.only(bottom: 10),
-        decoration: BoxDecoration(
-          color: Colors.red.shade100,
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: const Icon(Icons.delete_outline, color: Colors.red),
-      ),
-      onDismissed: (_) {
-        context.read<ListaProvider>().eliminarProducto(p);
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        decoration: BoxDecoration(
-          color: p.comprado
-              ? Theme.of(context).scaffoldBackgroundColor
-              : Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: p.comprado
-                ? Colors.grey.withValues(alpha: 0.2)
-                : kVerdeMenta,
-            width: 1.5,
-          ),
-          boxShadow: p.comprado
-              ? []
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-        ),
-        child: ListTile(
-          onTap: () =>
-              _mostrarEditarProducto(context, p, context.read<ListaProvider>()),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 6,
-          ),
-          leading: GestureDetector(
-            onTap: () {
-              HapticFeedback.lightImpact();
-              context.read<ListaProvider>().toggleComprado(p);
-            },
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: p.comprado ? kVerde : kVerdeMenta,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                p.comprado ? Icons.check_rounded : iconoCategoria,
-                color: p.comprado ? kBlanco : kVerde,
-                size: 22,
-              ),
-            ),
-          ),
-          title: Text(
-            p.nombre,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 15,
-              color: p.comprado
-                  ? Colors.grey
-                  : Theme.of(context).colorScheme.onSurface,
-              decoration: p.comprado ? TextDecoration.lineThrough : null,
-            ),
-          ),
-          subtitle: Row(
-            children: [
-              Text(
-                p.categoria,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: p.comprado ? Colors.grey.shade400 : Colors.grey,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(
-                  color: colorPrioridad.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  p.prioridad,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: colorPrioridad,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).scaffoldBackgroundColor,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      '×${p.cantidad}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: kVerdeMedio,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                  if (p.precioEstimado > 0)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        '\$${(p.precioEstimado * p.cantidad).toStringAsFixed(0)}',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(width: 8),
-              Icon(Icons.edit_outlined, size: 20, color: Colors.grey.shade400),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  IconData _iconoCategoria(String cat) {
-    switch (cat) {
-      case 'Lácteos':
-        return Icons.egg_outlined;
-      case 'Carnes':
-        return Icons.restaurant_outlined;
-      case 'Frutas y Verduras':
-        return Icons.eco_outlined;
-      case 'Panadería':
-        return Icons.bakery_dining_outlined;
-      case 'Granos':
-        return Icons.grain;
-      case 'Bebidas':
-        return Icons.local_drink_outlined;
-      case 'Limpieza':
-        return Icons.clean_hands_outlined;
-      default:
-        return Icons.shopping_bag_outlined;
-    }
-  }
 }

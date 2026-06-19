@@ -1,9 +1,10 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/producto.dart';
 import '../models/categoria_model.dart';
 import '../providers/lista_provider.dart';
 import '../theme/colors.dart';
+import '../theme/constants.dart';
 
 class CategoriasView extends StatelessWidget {
   const CategoriasView({super.key});
@@ -28,7 +29,9 @@ class CategoriasView extends StatelessWidget {
         title: const Text('Categorías', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
       ),
       floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 90.0),
+        padding: EdgeInsets.only(
+          bottom: kAlturaBarra + MediaQuery.of(context).padding.bottom + 16,
+        ),
         child: FloatingActionButton(
           backgroundColor: kVerde,
           tooltip: 'Crear nueva categoría',
@@ -39,7 +42,12 @@ class CategoriasView extends StatelessWidget {
       body: categorias.isEmpty 
         ? const Center(child: Text('No hay categorías guardadas', style: TextStyle(color: Colors.grey)))
         : ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+        padding: EdgeInsets.fromLTRB(
+          16, 
+          16, 
+          16, 
+          kAlturaBarra + MediaQuery.of(context).padding.bottom + 16,
+        ),
         children: categorias.map((cat) {
           final nombre = cat.nombre;
           final color  = Color(cat.colorValue);
@@ -235,7 +243,9 @@ class CategoriasView extends StatelessWidget {
           ]
         )
       )
-    );
+    ).then((_) {
+      nombreCtrl.dispose();
+    });
   }
 
   void _mostrarAgregarDesdeCategoria(BuildContext context, Producto baseP, ListaProvider provider) {
@@ -374,6 +384,8 @@ class CategoriasView extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ).then((_) {
+      nombreCtrl.dispose();
+    });
   }
 }
