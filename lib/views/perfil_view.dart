@@ -432,8 +432,9 @@ class _PerfilViewState extends State<PerfilView> {
             _guardarPreferencias();
           }),
           _menuItem(Icons.share_outlined, kVerdeClaro, 'Compartir lista', onTap: () => _compartirLista(productos)),
-          _menuItem(Icons.history_rounded, kVerde, 'Historial de compras', onTap: () {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const HistorialComprasView()));
+          _menuItem(Icons.history_rounded, kVerde, 'Historial de compras', onTap: () async {
+            await Navigator.push(context, MaterialPageRoute(builder: (_) => const HistorialComprasView()));
+            _cargarHistorial();
           }),
           _menuItem(Icons.help_outline_rounded, Colors.blueGrey, 'Ayuda y Soporte', onTap: _abrirSoporte),
         ]),

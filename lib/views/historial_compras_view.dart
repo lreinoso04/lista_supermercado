@@ -42,6 +42,10 @@ class _HistorialComprasViewState extends State<HistorialComprasView> {
   }
 
   void _mostrarDetalleCompra(BuildContext context, HistorialCompra h, List<Producto> productos) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final badgeBg = isDark ? kVerde.withValues(alpha: 0.25) : kVerdeMenta;
+    final handleColor = isDark ? Colors.white24 : Colors.grey.shade300;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -60,7 +64,7 @@ class _HistorialComprasViewState extends State<HistorialComprasView> {
               Center(
                 child: Container(
                   width: 40, height: 5,
-                  decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)),
+                  decoration: BoxDecoration(color: handleColor, borderRadius: BorderRadius.circular(10)),
                 ),
               ),
               const SizedBox(height: 16),
@@ -85,7 +89,7 @@ class _HistorialComprasViewState extends State<HistorialComprasView> {
                     Text('Total: \$${h.total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: kVerdeMedio)),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(color: kVerdeMenta, borderRadius: BorderRadius.circular(10)),
+                      decoration: BoxDecoration(color: badgeBg, borderRadius: BorderRadius.circular(10)),
                       child: Text('${h.cantidadProductos} Prods', style: const TextStyle(color: kVerde, fontWeight: FontWeight.bold, fontSize: 13)),
                     ),
                   ],
@@ -225,6 +229,8 @@ class _HistorialComprasViewState extends State<HistorialComprasView> {
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
               itemCount: _historial.length,
               itemBuilder: (context, index) {
+                final isDark = Theme.of(context).brightness == Brightness.dark;
+                final verBtnBg = isDark ? kVerde.withValues(alpha: 0.25) : kVerdeMenta;
                 final h = _historial[index];
                 return Container(
                   margin: const EdgeInsets.only(bottom: 12),
@@ -269,7 +275,7 @@ class _HistorialComprasViewState extends State<HistorialComprasView> {
                                 onTap: () => _abrirDetalle(h),
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  decoration: BoxDecoration(color: kVerdeMenta, borderRadius: BorderRadius.circular(8)),
+                                  decoration: BoxDecoration(color: verBtnBg, borderRadius: BorderRadius.circular(8)),
                                   child: const Text('Ver', style: TextStyle(color: kVerde, fontWeight: FontWeight.bold, fontSize: 12)),
                                 ),
                               ),

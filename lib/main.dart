@@ -54,10 +54,17 @@ class MarketApp extends StatelessWidget {
         colorSchemeSeed: kVerde,
         brightness: Brightness.dark,
         scaffoldBackgroundColor: const Color(0xFF121212),
-        cardTheme: const CardThemeData(elevation: 0, color: Color(0xFF1E1E1E)),
+        cardColor: const Color(0xFF1E1E1E),
+        cardTheme: const CardThemeData(
+          elevation: 0,
+          color: Color(0xFF1E1E1E),
+        ),
+        dialogTheme: const DialogThemeData(
+          backgroundColor: Color(0xFF1E1E1E),
+        ),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF121212),
-          surfaceTintColor: Color(0xFF1E1E1E),
+          backgroundColor: Color(0xFF1E1E1E),
+          surfaceTintColor: Colors.transparent,
           elevation: 0,
         ),
       ),
@@ -85,8 +92,16 @@ class _MainNavigationState extends State<MainNavigation> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final navBgColor = isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF7F4EB);
+    final navBorder = isDark ? Border.all(color: Colors.white12, width: 1) : null;
+    final inactiveColor = isDark ? Colors.white60 : Colors.black54;
+
     return Scaffold(
-      body: _pages[_index],
+      body: IndexedStack(
+        index: _index,
+        children: _pages,
+      ),
       extendBody: true,
       bottomNavigationBar: SafeArea(
         child: Padding(
@@ -94,11 +109,12 @@ class _MainNavigationState extends State<MainNavigation> {
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
             decoration: BoxDecoration(
-              color: const Color(0xFFF7F4EB), // Color beige similar a la imagen
+              color: navBgColor,
               borderRadius: BorderRadius.circular(40),
+              border: navBorder,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.1),
+                  color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.1),
                   blurRadius: 15,
                   offset: const Offset(0, 5),
                 ),
@@ -112,28 +128,32 @@ class _MainNavigationState extends State<MainNavigation> {
                   Icons.mic_none_rounded,
                   Icons.mic_rounded,
                   'Agregar',
-                  const Color(0xFF0D3269),
+                  isDark ? kVerdeClaro : const Color(0xFF0D3269),
+                  inactiveColor,
                 ),
                 _buildNavItem(
                   1,
                   Icons.shopping_cart_outlined,
                   Icons.shopping_cart,
                   'Mi Lista',
-                  const Color(0xFF0D3269),
+                  isDark ? kVerdeClaro : const Color(0xFF0D3269),
+                  inactiveColor,
                 ),
                 _buildNavItem(
                   2,
                   Icons.category_outlined,
                   Icons.category,
                   'Categorías',
-                  const Color(0xFF6B2D5C),
+                  isDark ? const Color(0xFFCE93D8) : const Color(0xFF6B2D5C),
+                  inactiveColor,
                 ),
                 _buildNavItem(
                   3,
                   Icons.person_outline_rounded,
                   Icons.person_rounded,
                   'Perfil',
-                  const Color(0xFF8B4513),
+                  isDark ? const Color(0xFFFFB74D) : const Color(0xFF8B4513),
+                  inactiveColor,
                 ),
               ],
             ),
@@ -148,7 +168,8 @@ class _MainNavigationState extends State<MainNavigation> {
     IconData icon,
     IconData activeIcon,
     String label,
-    Color activeColor, {
+    Color activeColor,
+    Color inactiveColor, {
     bool isLogo = false,
   }) {
     final isSelected = _index == index;
@@ -170,17 +191,17 @@ class _MainNavigationState extends State<MainNavigation> {
                   ? Image.asset(
                       'assets/icon.png',
                       height: isSelected ? 28 : 24,
-                      color: isSelected ? null : Colors.black54,
+                      color: isSelected ? null : inactiveColor,
                       colorBlendMode: isSelected ? null : BlendMode.srcIn,
                       errorBuilder: (c, e, s) => Icon(
                         isSelected ? activeIcon : icon,
-                        color: isSelected ? activeColor : Colors.black54,
+                        color: isSelected ? activeColor : inactiveColor,
                         size: 26,
                       ),
                     )
                   : Icon(
                       isSelected ? activeIcon : icon,
-                      color: isSelected ? activeColor : Colors.black54,
+                      color: isSelected ? activeColor : inactiveColor,
                       size: 26,
                     ),
             ),
@@ -190,7 +211,7 @@ class _MainNavigationState extends State<MainNavigation> {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                color: isSelected ? activeColor : Colors.black54,
+                color: isSelected ? activeColor : inactiveColor,
               ),
               child: Text(label),
             ),
