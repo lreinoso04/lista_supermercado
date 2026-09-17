@@ -338,73 +338,53 @@ class _ListaComprasViewState extends State<ListaComprasView> {
         ? 0.0
         : comprados.length / productos.length;
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         backgroundColor: Theme.of(context).cardColor,
         toolbarHeight: 64,
+        elevation: 0,
+        scrolledUnderElevation: 0,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text(
+            Text(
               'SmartCart',
               style: TextStyle(
                 fontWeight: FontWeight.w800,
-                fontSize: 24,
-                color: kVerde,
+                fontSize: 22,
+                color: isDark ? kVerdeClaro : kVerde,
               ),
             ),
             Text(
               '${productos.length} productos • ${comprados.length} comprados',
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+              style: TextStyle(
+                fontSize: 12,
+                color: isDark ? Colors.white60 : Colors.grey,
+              ),
             ),
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.download_rounded, color: kVerdeMedio),
-            tooltip: 'Conectarse a una lista',
-            onPressed: () => DialogosSincronizacion.mostrarConectar(
-              context: context,
-              provider: provider,
-              extraerPin: _extraerPin,
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.share_rounded, color: kVerdeMedio),
-            tooltip: 'Compartir mi Lista',
-            onPressed: () => DialogosSincronizacion.mostrarCompartir(
-              context: context,
-              provider: provider,
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.sms_rounded, color: Colors.blueAccent),
-            tooltip: 'Enviar Recordatorio SMS',
-            onPressed: () => _enviarRecordatorioSMS(pendientes),
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Colors.grey),
-            tooltip: 'Reiniciar carrito',
-            onPressed: () => _mostrarConfirmacionReinicio(context, provider),
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete_sweep_rounded, color: Colors.redAccent),
-            tooltip: 'Vaciar lista',
-            onPressed: () => _mostrarConfirmacionVaciar(context, provider),
-          ),
           Padding(
-            padding: const EdgeInsets.only(right: 8),
+            padding: const EdgeInsets.only(right: 12),
             child: GestureDetector(
               onTap: () => _leerLista(productos),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
-                  color: _ttsActivo ? kNaranja.withValues(alpha: 0.15) : kVerdeMenta,
+                  color: _ttsActivo
+                      ? kNaranja.withValues(alpha: 0.15)
+                      : (isDark ? kVerde.withValues(alpha: 0.25) : kVerdeMenta),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                    color: _ttsActivo ? kNaranja : kVerdeClaro,
+                    color: _ttsActivo
+                        ? kNaranja
+                        : (isDark ? kVerdeClaro : kVerdeClaro),
                     width: 1.5,
                   ),
                 ),
@@ -414,7 +394,7 @@ class _ListaComprasViewState extends State<ListaComprasView> {
                     Icon(
                       _ttsActivo ? Icons.pause_rounded : Icons.volume_up_rounded,
                       size: 16,
-                      color: _ttsActivo ? kNaranja : kVerde,
+                      color: _ttsActivo ? kNaranja : (isDark ? kVerdeClaro : kVerde),
                     ),
                     const SizedBox(width: 5),
                     Text(
@@ -424,7 +404,7 @@ class _ListaComprasViewState extends State<ListaComprasView> {
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
-                        color: _ttsActivo ? kNaranja : kVerde,
+                        color: _ttsActivo ? kNaranja : (isDark ? kVerdeClaro : kVerde),
                       ),
                     ),
                   ],
@@ -433,6 +413,59 @@ class _ListaComprasViewState extends State<ListaComprasView> {
             ),
           ),
         ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(46),
+          child: Container(
+            height: 46,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              border: Border(
+                top: BorderSide(
+                  color: isDark ? Colors.white10 : Colors.grey.withValues(alpha: 0.12),
+                  width: 1,
+                ),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.download_rounded, color: kVerdeMedio),
+                  tooltip: 'Conectarse a una lista',
+                  onPressed: () => DialogosSincronizacion.mostrarConectar(
+                    context: context,
+                    provider: provider,
+                    extraerPin: _extraerPin,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.share_rounded, color: kVerdeMedio),
+                  tooltip: 'Compartir mi Lista',
+                  onPressed: () => DialogosSincronizacion.mostrarCompartir(
+                    context: context,
+                    provider: provider,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.sms_rounded, color: Colors.blueAccent),
+                  tooltip: 'Enviar Recordatorio SMS',
+                  onPressed: () => _enviarRecordatorioSMS(pendientes),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded, color: Colors.grey),
+                  tooltip: 'Reiniciar carrito',
+                  onPressed: () => _mostrarConfirmacionReinicio(context, provider),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_sweep_rounded, color: Colors.redAccent),
+                  tooltip: 'Vaciar lista',
+                  onPressed: () => _mostrarConfirmacionVaciar(context, provider),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
       body: SafeArea(
         child: provider.isLoading
