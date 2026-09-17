@@ -4,11 +4,13 @@ import '../theme/colors.dart';
 class BarraProgresoPresupuesto extends StatelessWidget {
   final double progreso;
   final double gastoTotal;
+  final double? bottomMargin;
 
   const BarraProgresoPresupuesto({
     super.key,
     required this.progreso,
     required this.gastoTotal,
+    this.bottomMargin,
   });
 
   @override
@@ -17,9 +19,25 @@ class BarraProgresoPresupuesto extends StatelessWidget {
     final trackColor = isDark ? Colors.white12 : kVerdeMenta;
 
     return Container(
-      color: Theme.of(context).cardColor,
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+      margin: EdgeInsets.fromLTRB(16, 4, 16, bottomMargin ?? 8.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? Colors.white12 : Colors.grey.withValues(alpha: 0.15),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,

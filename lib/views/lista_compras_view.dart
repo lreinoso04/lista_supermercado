@@ -434,64 +434,65 @@ class _ListaComprasViewState extends State<ListaComprasView> {
           ),
         ],
       ),
-      body: provider.isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                if (_ttsActivo)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    color: kNaranja.withValues(alpha: 0.1),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.graphic_eq, color: kNaranja, size: 16),
-                        SizedBox(width: 6),
-                        Text(
-                          'Leyendo lista en voz alta...',
-                          style: TextStyle(
-                            color: kNaranja,
-                            fontSize: 12,
-                            fontStyle: FontStyle.italic,
+      body: SafeArea(
+        child: provider.isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : Column(
+                children: [
+                  if (_ttsActivo)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      color: kNaranja.withValues(alpha: 0.1),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.graphic_eq, color: kNaranja, size: 16),
+                          SizedBox(width: 6),
+                          Text(
+                            'Leyendo lista en voz alta...',
+                            style: TextStyle(
+                              color: kNaranja,
+                              fontSize: 12,
+                              fontStyle: FontStyle.italic,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
 
-                Expanded(
-                  child: productos.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.shopping_cart_outlined,
-                                size: 96,
-                                color: Colors.grey.withValues(alpha: 0.4),
-                              ),
-                              const SizedBox(height: 16),
-                              const Text(
-                                'Tu lista está vacía',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  color: Colors.grey,
+                  Expanded(
+                    child: productos.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.shopping_cart_outlined,
+                                  size: 96,
+                                  color: Colors.grey.withValues(alpha: 0.4),
                                 ),
-                              ),
-                              const SizedBox(height: 8),
-                              const Text(
-                                'Usa el micrófono para agregar productos',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.grey,
+                                const SizedBox(height: 16),
+                                const Text(
+                                  'Tu lista está vacía',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    color: Colors.grey,
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        )
-                      : ListView(
-                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Usa el micrófono para agregar productos',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : ListView(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
                           children: [
                             if (pendientes.isNotEmpty)
                               ..._buildCategoriasGrupos(
@@ -566,6 +567,7 @@ class _ListaComprasViewState extends State<ListaComprasView> {
                   ),
               ],
             ),
+      ),
     );
   }
 }

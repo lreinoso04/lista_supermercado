@@ -97,12 +97,16 @@ class _MainNavigationState extends State<MainNavigation> {
     final navBorder = isDark ? Border.all(color: Colors.white12, width: 1) : null;
     final inactiveColor = isDark ? Colors.white60 : Colors.black54;
 
+    final activeBgColor = _index == 0
+        ? (isDark ? const Color(0xFF101A12) : kVerde)
+        : Theme.of(context).scaffoldBackgroundColor;
+
     return Scaffold(
+      backgroundColor: activeBgColor,
       body: IndexedStack(
         index: _index,
         children: _pages,
       ),
-      extendBody: true,
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),

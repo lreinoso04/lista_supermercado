@@ -27,19 +27,22 @@ class CategoriasView extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Categorías', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
       ),
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 90.0),
-        child: FloatingActionButton(
-          backgroundColor: kVerde,
-          tooltip: 'Crear nueva categoría',
-          onPressed: () => _mostrarDialogoCategoria(context, provider, null),
-          child: const Icon(Icons.add, color: kBlanco),
-        ),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: kVerde,
+        tooltip: 'Crear nueva categoría',
+        onPressed: () => _mostrarDialogoCategoria(context, provider, null),
+        child: const Icon(Icons.add, color: kBlanco),
       ),
-      body: categorias.isEmpty 
-        ? const Center(child: Text('No hay categorías guardadas', style: TextStyle(color: Colors.grey)))
-        : ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+      body: SafeArea(
+        child: categorias.isEmpty 
+          ? const Center(
+              child: Text(
+                'No hay categorías guardadas',
+                style: TextStyle(color: Colors.grey),
+              ),
+            )
+          : ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
         children: categorias.map((cat) {
           final nombre = cat.nombre;
           final color  = Color(cat.colorValue);
@@ -128,7 +131,8 @@ class CategoriasView extends StatelessWidget {
           );
         }).toList(),
       ),
-    );
+    ),
+  );
   }
 
   void _eliminarCategoria(BuildContext context, ListaProvider provider, CategoriaModel cat, int itemsCount) {
