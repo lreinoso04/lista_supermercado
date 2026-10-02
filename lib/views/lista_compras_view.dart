@@ -609,16 +609,62 @@ class _ListaComprasViewState extends State<ListaComprasView> {
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                  onPressed: () {
-                                    provider.terminarCompra();
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          '✅ Compra terminada y guardada en el historial',
+                                  onPressed: () async {
+                                    final comprados = provider.productos.where((p) => p.comprado).toList();
+                                    if (comprados.isEmpty) {
+                                      final confirmar = await showDialog<bool>(
+                                        context: context,
+                                        builder: (ctx) => AlertDialog(
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                          title: const Row(
+                                            children: [
+                                              Icon(Icons.shopping_bag_outlined, color: kVerde),
+                                              SizedBox(width: 8),
+                                              Text('Finalizar Compra'),
+                                            ],
+                                          ),
+                                          content: Text(
+                                            'No tienes productos marcados como comprados (✓).\n\n'
+                                            '¿Deseas marcar todos los productos (${provider.productos.length}) como comprados y finalizar la lista, o volver para marcarlos?',
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () => Navigator.pop(ctx, false),
+                                              child: const Text('Volver', style: TextStyle(color: Colors.grey)),
+                                            ),
+                                            ElevatedButton(
+                                              style: ElevatedButton.styleFrom(backgroundColor: kVerde),
+                                              onPressed: () => Navigator.pop(ctx, true),
+                                              child: const Text('Marcar todos y terminar', style: TextStyle(color: Colors.white)),
+                                            ),
+                                          ],
                                         ),
-                                        backgroundColor: kVerde,
-                                      ),
-                                    );
+                                      );
+
+                                      if (confirmar == true) {
+                                        await provider.marcarTodosComoComprados();
+                                        final procesados = await provider.terminarCompra();
+                                        if (!context.mounted) return;
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('✅ Compra terminada ($procesados productos) y guardada en el historial'),
+                                            backgroundColor: kVerde,
+                                          ),
+                                        );
+                                      }
+                                      return;
+                                    }
+
+                                    final procesados = await provider.terminarCompra();
+                                    if (!context.mounted) return;
+                                    if (procesados > 0) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('✅ Compra terminada ($procesados productos) y guardada en el historial'),
+                                          backgroundColor: kVerde,
+                                        ),
+                                      );
+                                    }
                                   },
                                 ),
                               ),

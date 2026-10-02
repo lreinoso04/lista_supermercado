@@ -1,7 +1,7 @@
 # 📋 Informe Integral de Cambios y Nuevas Funcionalidades
 ## Rama: `improvements-login-with-mail-and-google`
 **Proyecto:** SmartCart - Lista de Compras Inteligente  
-**Versión:** `1.1.0+3`  
+**Versión:** `1.1.1+4`  
 **Fecha:** Octubre 2026  
 
 ---
@@ -11,14 +11,15 @@
 2. [Autenticación Segura y Modo Invitado](#2-autenticación-segura-y-modo-invitado)
 3. [Sistema de Seguridad Anti-Spam y Anti-Bot](#3-sistema-de-seguridad-anti-spam-y-anti-bot)
 4. [Sincronización en la Nube y Compras Colaborativas](#4-sincronización-en-la-nube-y-compras-colaborativas)
-5. [Deep Linking y Compartición Inteligente](#5-deep-linking-y-compartición-inteligente)
+5. [Deep Linking, App Links y Firebase Hosting](#5-deep-linking-app-links-y-firebase-hosting)
 6. [Motor Bidireccional de Notificaciones y Control Anti-Spam](#6-motor-bidireccional-de-notificaciones-y-control-anti-spam)
 7. [Historial de Actividad en Tiempo Real](#7-historial-de-actividad-en-tiempo-real)
 8. [Modernización Visual y Mejoras de Interfaz (UI/UX)](#8-modernización-visual-y-mejoras-de-interfaz-uiux)
-9. [Arquitectura de Base de Datos y Persistencia Híbrida](#9-arquitectura-de-base-de-datos-y-persistencia-híbrida)
-10. [Compilación, Desugaring y Generación de APK Release](#10-compilación-desugaring-y-generación-de-apk-release)
-11. [Métricas de Calidad y Pruebas Automatizadas](#11-métricas-de-calidad-y-pruebas-automatizadas)
-12. [Historial de Commits de la Rama](#12-historial-de-commits-de-la-rama)
+9. [Solución del Bloqueo al Finalizar Compra y Resiliencia Offline-First](#9-solución-del-bloqueo-al-finalizar-compra-y-resiliencia-offline-first)
+10. [Reglas Oficiales de Seguridad en Cloud Firestore](#10-reglas-oficiales-de-seguridad-en-cloud-firestore)
+11. [Compilación, Desugaring y Generación de APK Release](#11-compilación-desugaring-y-generación-de-apk-release)
+12. [Métricas de Calidad y Pruebas Automatizadas](#12-métricas-de-calidad-y-pruebas-automatizadas)
+13. [Historial de Commits de la Rama](#13-historial-de-commits-de-la-rama)
 
 ---
 
@@ -171,7 +172,38 @@ Para complementar las notificaciones efímeras, se añadió un visor permanente 
 
 ---
 
-## 10. Compilación, Desugaring y Generación de APK Release
+## 9. Solución del Bloqueo al Finalizar Compra y Resiliencia Offline-First
+
+Se diagnosticó y resolvió el problema por el cual la pantalla de *"Mi Lista"* quedaba colgada en un `CircularProgressIndicator` infinito al pulsar "Terminar Compra":
+
+* **Diagnóstico Técnico:**
+  - `ListaProvider.terminarCompra()` activaba `_isLoading = true; notifyListeners();`, pero no contaba con una cláusula `try ... finally`. Cualquier fallo en la nube interrumpía la ejecución antes de alcanzar `_isLoading = false;`.
+  - `FirebaseService` intentaba una escritura cruzada en lote (`batch.set`) en `/usuarios/{mUid}/historial_compras` de otros miembros de la lista, lo que violaba las reglas de seguridad de Firestore (`permission-denied`).
+  - Las llamadas a Firestore carecían de límite de tiempo (`timeout`), congelando el hilo si la conexión se interrumpía.
+
+* **Solución y Blindaje Offline-First:**
+  - **Prioridad Local Inmediata:** La compra se registra primero al 100% en la base de datos local SQLite (`DBService.instance.createHistorial`), se actualiza el catálogo y se eliminan los productos comprados del carrito.
+  - **Estructura `try ... catch ... finally`:** Se garantizó que `_isLoading = false; notifyListeners();` se ejecute siempre, tanto en `terminarCompra()` como en `reiniciarLista()` y `vaciarListaDesdeCero()`.
+  - **Timeouts Protegidos de 4 Segundos:** Las sincronizaciones en la nube se ejecutan de forma independiente con `.timeout(const Duration(seconds: 4))`. Si la red falla o Firestore no responde, el usuario nunca experimenta bloqueos.
+  - **Mejora de UX en Lista Vacía o sin Comprados:** Si el usuario pulsa "Terminar Compra" sin tener productos con check (✓), se despliega un diálogo ofreciendo *"Marcar todos y terminar"* o *"Volver"*, con ejecución asíncrona segura.
+
+---
+
+## 10. Reglas Oficiales de Seguridad en Cloud Firestore
+
+Se diseñó e integró el archivo de reglas de producción [`firestore.rules`](file:///c:/Users/Joan%20Marquez/Documents/GitHub/lista_supermercado/firestore.rules) y se vinculó en [`firebase.json`](file:///c:/Users/Joan%20Marquez/Documents/GitHub/lista_supermercado/firebase.json):
+
+* **`listas/{pin}`:**
+  - Acceso mediante validación de PIN alfanumérico seguro (4 a 8 caracteres).
+  - Bloqueo explícito del listado global (`allow list: if false;`) para evitar enumeración y raspado no autorizado de listas ajenas.
+  - Lectura y actualización colaborativa para miembros que poseen el PIN.
+  - Subcolección `listas/{pin}/historial/{uuid}` para auditoría inmutable de compras finalizadas.
+* **`usuarios/{userId}` e `historial_compras`:**
+  - Aislamiento estricto de datos: solo el usuario autenticado dueño del identificador (`request.auth.uid == userId`) puede leer, crear o eliminar sus datos personales y su historial de compras en la nube.
+
+---
+
+## 11. Compilación, Desugaring y Generación de APK Release
 
 Para garantizar compatibilidad universal con dispositivos Android modernos (Android 11 a 15) y soporte para `flutter_local_notifications`:
 
@@ -192,13 +224,13 @@ Para garantizar compatibilidad universal con dispositivos Android modernos (Andr
 3. **Firma Digital de Producción:**
    - Keystore RSA 2048 bits estándar PKCS12 con esquemas de firma V1, V2 y V3.
 4. **Artefacto Compilado:**
-   - **Ruta:** `apk/SmartCart_v1.1.0.apk` (y copia en `apk/SmartCart.apk`).
-   - **Versión:** `1.1.0+3`.
-   - **Tamaño:** 58.1 MB (con tree-shaking de fuentes e iconos optimizado al 99.1%).
+   - **Ruta:** `apk/SmartCart_v1.1.1.apk` (y copia en `apk/SmartCart.apk`).
+   - **Versión:** `1.1.1+4`.
+   - **Tamaño:** ~58 MB (con tree-shaking de fuentes e iconos optimizado al 99.1%).
 
 ---
 
-## 11. Métricas de Calidad y Pruebas Automatizadas
+## 12. Métricas de Calidad y Pruebas Automatizadas
 
 Se construyó una suite de pruebas robusta en `test/` que cubre todos los subsistemas:
 
@@ -206,6 +238,9 @@ Se construyó una suite de pruebas robusta en `test/` que cubre todos los subsis
 * **`test/security_auth_test.dart`:** Funcionamiento del anti-bot (`HumanVerificationTile`), honeypot y temporizadores.
 * **`test/deep_link_test.dart`:** Extracción de PINs desde URIs personalizadas y URLs web, validación de constructores de enlaces.
 * **`test/historial_sync_test.dart`:** Generación y serialización de UUIDs en compras y retrocompatibilidad con esquemas antiguos.
+* **`test/finalizar_compra_resilience_test.dart`:** Resiliencia offline-first al finalizar compras, marcado masivo y cálculo de totales.
+* **`test/categoria_sync_test.dart`:** Sincronización de categorías en tiempo real sin distinción de mayúsculas.
+* **`test/user_profile_isolation_test.dart`:** Aislamiento total de preferencias entre cuentas y modo invitado.
 * **`test/login_view_test.dart`:** Formularios de acceso, registro, conmutación de modos y modo invitado.
 * **`test/notifications_test.dart`:** 
   - Serialización y tiempo relativo de `NotificacionEvento`.
@@ -215,12 +250,12 @@ Se construyó una suite de pruebas robusta en `test/` que cubre todos los subsis
   - Pruebas de widgets: banner flotante In-App y modal de actividad.
 
 ### Resultados de Verificación:
-* **Pruebas Automatizadas:** **32/32 tests pasados exitosamente (100% pass rate)**.
+* **Pruebas Automatizadas:** **35/35 tests pasados exitosamente (100% pass rate)**.
 * **Análisis Estático (`flutter analyze`):** **0 errores, 0 advertencias, 0 sugerencias de linter**.
 
 ---
 
-## 12. Historial de Commits de la Rama
+## 13. Historial de Commits de la Rama
 
 La rama `improvements-login-with-mail-and-google` contiene los siguientes commits estructurados cronológicamente:
 
@@ -232,6 +267,10 @@ La rama `improvements-login-with-mail-and-google` contiene los siguientes commit
 6. `d2884c0` — **feat(sync): sincronizar historial con Firebase, compras colaborativas, categorias y deep links:** SQLite v8, sincronización bidireccional de historial, replicación de compras finalizadas, sync de categorías y Deep Linking.
 7. `9a6879d` — **feat: implement shared list bidirectional notifications, anti-spam rate limiting, and activity history:** Motor de notificaciones en tiempo real, buffer anti-spam por ráfagas, banner In-App HUD, push local, botón TTS solo icono y modal de actividad.
 8. `22077e4` — **build: generate release APK v1.1.0 with desugaring and versioned binary:** Configuración de `coreLibraryDesugaring`, bump de versión a 1.1.0+3 y empaquetado release en `apk/SmartCart_v1.1.0.apk`.
+9. `c39f160` — **docs: generate comprehensive branch change report:** Informe detallado en Markdown de todas las funcionalidades.
+10. `92814da` — **config(hosting): configure Firebase Hosting, URL rewrites and assetlinks.json for deep linking:** Configuración de Firebase Hosting, App Links de Android y página web de aterrizaje.
+11. `[commit actual]` — **fix(checkout): add try-finally resilience, offline-first safety, timeouts and Firestore rules:** Solución del bloqueo en finalización de compras, timeouts en FirebaseService, reglas de seguridad de Firestore y release APK v1.1.1.
 
 ---
 *Informe generado automáticamente para SmartCart.*
+

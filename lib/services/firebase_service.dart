@@ -59,28 +59,41 @@ class FirebaseService {
     List<CategoriaModel>? categorias,
     NotificacionEvento? eventoCambio,
   }) async {
-    final cleanPin = pin.trim().toUpperCase();
-    final jsonProds = productos.map((p) => p.toMap()).toList();
-    final jsonCats = categorias?.map((c) => c.toMap()).toList() ?? [];
+    try {
+      final cleanPin = pin.trim().toUpperCase();
+      final jsonProds = productos.map((p) => p.toMap()).toList();
+      final jsonCats = categorias?.map((c) => c.toMap()).toList() ?? [];
 
-    final payload = <String, dynamic>{
-      'productos': jsonProds,
-      'categorias': jsonCats,
-      'ultimaActualizacion': FieldValue.serverTimestamp(),
-    };
+      final payload = <String, dynamic>{
+        'productos': jsonProds,
+        'categorias': jsonCats,
+        'ultimaActualizacion': FieldValue.serverTimestamp(),
+      };
 
-    if (eventoCambio != null) {
-      payload['ultimoCambio'] = eventoCambio.toMap();
-      payload['actividadReciente'] = FieldValue.arrayUnion([eventoCambio.toMap()]);
+      if (eventoCambio != null) {
+        payload['ultimoCambio'] = eventoCambio.toMap();
+        payload['actividadReciente'] = FieldValue.arrayUnion([eventoCambio.toMap()]);
+      }
+
+      await _db
+          .collection('listas')
+          .doc(cleanPin)
+          .set(payload, SetOptions(merge: true))
+          .timeout(const Duration(seconds: 4));
+    } catch (e) {
+      debugPrint('Aviso: Fallo o timeout al sincronizar lista con Firestore: $e');
     }
-
-    await _db.collection('listas').doc(cleanPin).set(payload, SetOptions(merge: true));
   }
   
   Future<bool> verificarPin(String pin) async {
-    final cleanPin = pin.trim().toUpperCase();
-    final doc = await _db.collection('listas').doc(cleanPin).get();
-    return doc.exists;
+    try {
+      final cleanPin = pin.trim().toUpperCase();
+      final doc = await _db.collection('listas').doc(cleanPin).get().timeout(const Duration(seconds: 4));
+      return doc.exists;
+    } catch (e) {
+      debugPrint('Aviso: Error verificando PIN: $e');
+      return false;
+    }
   }
 
   // --- GESTIÓN DE MIEMBROS EN LISTAS COMPARTIDAS ---
@@ -91,7 +104,7 @@ class FirebaseService {
       final cleanPin = pin.trim().toUpperCase();
       await _db.collection('listas').doc(cleanPin).set({
         'miembros': FieldValue.arrayUnion([userId]),
-      }, SetOptions(merge: true));
+      }, SetOptions(merge: true)).timeout(const Duration(seconds: 4));
     } catch (e) {
       debugPrint('Error registrando miembro en lista $pin: $e');
     }
@@ -105,68 +118,48 @@ class FirebaseService {
     required String? userId,
     required String? userNombre,
   }) async {
-    final cleanPin = pin.trim().toUpperCase();
-    final docRef = _db.collection('listas').doc(cleanPin);
-
-    // 1. Guardar evento en la subcolección de compras de la lista
-    final compraData = historial.toMap();
-    compraData['finalizadoPorUid'] = userId;
-    compraData['finalizadoPorNombre'] = userNombre ?? 'Familiar';
-    compraData['timestamp'] = FieldValue.serverTimestamp();
-
-    await docRef.collection('historial').doc(historial.uuid).set(compraData);
-
-    // 2. Notificar en el documento principal para activación de streams en otros dispositivos
-    final eventoFinalizacion = NotificacionEvento(
-      id: historial.uuid,
-      autorUid: userId ?? 'invitado',
-      autorNombre: userNombre ?? 'Un familiar',
-      tipo: TipoNotificacionLista.compraFinalizada,
-      detalle: '${historial.cantidadProductos} productos (Total: \$${historial.total.toStringAsFixed(2)})',
-    );
-
-    await docRef.set({
-      'ultimaCompraFinalizada': {
-        'uuid': historial.uuid,
-        'fecha': historial.fecha,
-        'total': historial.total,
-        'cantidadProductos': historial.cantidadProductos,
-        'productosJson': historial.productosJson,
-        'pinLista': cleanPin,
-        'finalizadoPorUid': userId,
-        'finalizadoPorNombre': userNombre ?? 'Familiar',
-      },
-      'ultimoCambio': eventoFinalizacion.toMap(),
-      'actividadReciente': FieldValue.arrayUnion([eventoFinalizacion.toMap()]),
-      'ultimaActualizacion': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-
-    // 3. Replicar la compra a los historiales personales de los miembros autenticados
     try {
-      final snap = await docRef.get();
-      if (snap.exists && snap.data() != null) {
-        final miembros = (snap.data()!['miembros'] as List<dynamic>?)
-            ?.map((e) => e.toString())
-            .toList() ?? [];
+      final cleanPin = pin.trim().toUpperCase();
+      final docRef = _db.collection('listas').doc(cleanPin);
 
-        // Si el usuario actual no estaba en miembros, añadirlo
-        if (userId != null && !miembros.contains(userId)) {
-          miembros.add(userId);
-        }
+      // 1. Guardar evento en la subcolección de compras de la lista
+      final compraData = historial.toMap();
+      compraData['finalizadoPorUid'] = userId;
+      compraData['finalizadoPorNombre'] = userNombre ?? 'Familiar';
+      compraData['timestamp'] = FieldValue.serverTimestamp();
 
-        final batch = _db.batch();
-        for (final mUid in miembros) {
-          final userHistRef = _db
-              .collection('usuarios')
-              .doc(mUid)
-              .collection('historial_compras')
-              .doc(historial.uuid);
-          batch.set(userHistRef, compraData);
-        }
-        await batch.commit();
-      }
+      await docRef
+          .collection('historial')
+          .doc(historial.uuid)
+          .set(compraData)
+          .timeout(const Duration(seconds: 4));
+
+      // 2. Notificar en el documento principal para activación de streams en otros dispositivos
+      final eventoFinalizacion = NotificacionEvento(
+        id: historial.uuid,
+        autorUid: userId ?? 'invitado',
+        autorNombre: userNombre ?? 'Un familiar',
+        tipo: TipoNotificacionLista.compraFinalizada,
+        detalle: '${historial.cantidadProductos} productos (Total: \$${historial.total.toStringAsFixed(2)})',
+      );
+
+      await docRef.set({
+        'ultimaCompraFinalizada': {
+          'uuid': historial.uuid,
+          'fecha': historial.fecha,
+          'total': historial.total,
+          'cantidadProductos': historial.cantidadProductos,
+          'productosJson': historial.productosJson,
+          'pinLista': cleanPin,
+          'finalizadoPorUid': userId,
+          'finalizadoPorNombre': userNombre ?? 'Familiar',
+        },
+        'ultimoCambio': eventoFinalizacion.toMap(),
+        'actividadReciente': FieldValue.arrayUnion([eventoFinalizacion.toMap()]),
+        'ultimaActualizacion': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true)).timeout(const Duration(seconds: 4));
     } catch (e) {
-      debugPrint('Error replicando compra a miembros de la lista: $e');
+      debugPrint('Aviso: Error registrando compra compartida en Firestore: $e');
     }
   }
 
@@ -181,9 +174,10 @@ class FirebaseService {
           .doc(userId)
           .collection('historial_compras')
           .doc(historial.uuid)
-          .set(docData, SetOptions(merge: true));
+          .set(docData, SetOptions(merge: true))
+          .timeout(const Duration(seconds: 4));
     } catch (e) {
-      debugPrint('Error guardando historial de usuario en Firebase: $e');
+      debugPrint('Aviso: Error o timeout guardando historial de usuario en Firebase: $e');
     }
   }
 
@@ -193,14 +187,15 @@ class FirebaseService {
           .collection('usuarios')
           .doc(userId)
           .collection('historial_compras')
-          .get();
+          .get()
+          .timeout(const Duration(seconds: 4));
 
       return querySnap.docs.map((doc) {
         final data = doc.data();
         return HistorialCompra.fromMap(data);
       }).toList();
     } catch (e) {
-      debugPrint('Error obteniendo historial de usuario en Firebase: $e');
+      debugPrint('Aviso: Error o timeout obteniendo historial de usuario en Firebase: $e');
       return [];
     }
   }
@@ -212,9 +207,10 @@ class FirebaseService {
           .doc(userId)
           .collection('historial_compras')
           .doc(uuid)
-          .delete();
+          .delete()
+          .timeout(const Duration(seconds: 4));
     } catch (e) {
-      debugPrint('Error eliminando historial de usuario en Firebase: $e');
+      debugPrint('Aviso: Error o timeout eliminando historial de usuario en Firebase: $e');
     }
   }
 

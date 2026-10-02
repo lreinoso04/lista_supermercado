@@ -404,102 +404,149 @@ class ListaProvider extends ChangeNotifier {
   Future<void> reiniciarLista() async {
     _isLoading = true;
     notifyListeners();
-    for (var p in _productos) {
-      if (p.comprado) {
-        p.comprado = false;
-        await DBService.instance.update(p);
+    try {
+      for (var p in _productos) {
+        if (p.comprado) {
+          p.comprado = false;
+          await DBService.instance.update(p);
+        }
       }
+      final actor = await _obtenerActorInfo();
+      _syncNube(
+        eventoCambio: NotificacionEvento(
+          autorUid: actor['uid']!,
+          autorNombre: actor['nombre']!,
+          tipo: TipoNotificacionLista.listaReiniciada,
+        ),
+      );
+    } catch (e) {
+      debugPrint('Error reiniciando lista: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
-    final actor = await _obtenerActorInfo();
-    _syncNube(
-      eventoCambio: NotificacionEvento(
-        autorUid: actor['uid']!,
-        autorNombre: actor['nombre']!,
-        tipo: TipoNotificacionLista.listaReiniciada,
-      ),
-    );
-    _isLoading = false;
-    notifyListeners();
   }
 
   Future<void> vaciarListaDesdeCero() async {
     _isLoading = true;
     notifyListeners();
-    final productosActuales = _productos.toList();
-    for (var p in productosActuales) {
-      await DBService.instance.delete(p.id!);
-      _productos.removeWhere((item) => item.id == p.id);
+    try {
+      final productosActuales = _productos.toList();
+      for (var p in productosActuales) {
+        if (p.id != null) {
+          await DBService.instance.delete(p.id!);
+        } else {
+          await DBService.instance.deleteByUuid(p.uuid);
+        }
+        _productos.removeWhere((item) => item.uuid == p.uuid);
+      }
+      final actor = await _obtenerActorInfo();
+      _syncNube(
+        eventoCambio: NotificacionEvento(
+          autorUid: actor['uid']!,
+          autorNombre: actor['nombre']!,
+          tipo: TipoNotificacionLista.listaVaciada,
+        ),
+      );
+    } catch (e) {
+      debugPrint('Error vaciando lista: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
-    final actor = await _obtenerActorInfo();
-    _syncNube(
-      eventoCambio: NotificacionEvento(
-        autorUid: actor['uid']!,
-        autorNombre: actor['nombre']!,
-        tipo: TipoNotificacionLista.listaVaciada,
-      ),
-    );
-    _isLoading = false;
-    notifyListeners();
   }
 
-  Future<void> terminarCompra() async {
-    if (_productos.isEmpty) return;
+  Future<void> marcarTodosComoComprados() async {
+    for (var p in _productos) {
+      if (!p.comprado) {
+        p.comprado = true;
+        await DBService.instance.update(p);
+      }
+    }
+    notifyListeners();
+    _syncNube();
+  }
+
+  Future<int> terminarCompra() async {
+    if (_productos.isEmpty) return 0;
     
     _isLoading = true;
     notifyListeners();
 
-    final comprados = productos.where((p) => p.comprado).toList();
+    try {
+      final comprados = productos.where((p) => p.comprado).toList();
 
-    if (comprados.isNotEmpty) {
-      double total = comprados.fold(0.0, (acc, p) => acc + (p.precioEstimado * p.cantidad));
-      int cantidad = comprados.fold(0, (acc, p) => acc + p.cantidad);
-      final fecha = DateTime.now().toIso8601String();
-      final user = AuthService.instance.currentUser;
-      final userNombre = user?.displayName ?? user?.email?.split('@').first ?? 'Yo';
+      if (comprados.isNotEmpty) {
+        double total = comprados.fold(0.0, (acc, p) => acc + (p.precioEstimado * p.cantidad));
+        int cantidad = comprados.fold(0, (acc, p) => acc + p.cantidad);
+        final fecha = DateTime.now().toIso8601String();
+        final user = AuthService.instance.currentUser;
+        final userNombre = user?.displayName ?? user?.email?.split('@').first ?? 'Yo';
 
-      final nuevoHistorial = HistorialCompra(
-        fecha: fecha,
-        total: total,
-        cantidadProductos: cantidad,
-        productosJson: jsonEncode(comprados.map((p) => p.toMap()).toList()),
-        pinLista: _pinActual,
-        finalizadoPorNombre: userNombre,
-      );
-
-      await DBService.instance.createHistorial(nuevoHistorial);
-
-      // 1. Sincronizar con el historial en Firestore del usuario autenticado
-      if (user != null) {
-        await FirebaseService.instance.guardarHistorialUsuario(user.uid, nuevoHistorial);
-      }
-
-      // 2. Si es una lista compartida, registrar evento para los demás miembros
-      if (_pinActual != null) {
-        await FirebaseService.instance.registrarCompraFinalizadaCompartida(
-          pin: _pinActual!,
-          historial: nuevoHistorial,
-          userId: user?.uid,
-          userNombre: userNombre,
+        final nuevoHistorial = HistorialCompra(
+          fecha: fecha,
+          total: total,
+          cantidadProductos: cantidad,
+          productosJson: jsonEncode(comprados.map((p) => p.toMap()).toList()),
+          pinLista: _pinActual,
+          finalizadoPorNombre: userNombre,
         );
-      }
 
-      // Solo eliminamos de la base de datos de productos aquellos que se compraron
-      for (var p in comprados) {
-        await DBService.instance.upsertCatalogo(p);
-        if (p.id != null) {
-          await DBService.instance.delete(p.id!);
+        // 1. Guardar primero en SQLite local (éxito garantizado offline)
+        await DBService.instance.createHistorial(nuevoHistorial);
+
+        // Solo eliminamos de la base de datos de productos aquellos que se compraron
+        for (var p in comprados) {
+          await DBService.instance.upsertCatalogo(p);
+          if (p.id != null) {
+            await DBService.instance.delete(p.id!);
+          } else {
+            await DBService.instance.deleteByUuid(p.uuid);
+          }
         }
-      }
-      
-      _catalogo = await DBService.instance.readAllCatalogo();
-      
-      // Removemos los items procesados de la lista local
-      _productos.removeWhere((item) => item.comprado);
-      _syncNube();
-    }
+        
+        _catalogo = await DBService.instance.readAllCatalogo();
+        
+        // Removemos los items procesados de la lista local
+        _productos.removeWhere((item) => item.comprado);
 
-    _isLoading = false;
-    notifyListeners();
+        // 2. Sincronización en la nube protegida e independiente con timeout
+        if (user != null) {
+          try {
+            await FirebaseService.instance
+                .guardarHistorialUsuario(user.uid, nuevoHistorial)
+                .timeout(const Duration(seconds: 4));
+          } catch (e) {
+            debugPrint('Aviso: Error sincronizando historial con usuario en nube: $e');
+          }
+        }
+
+        if (_pinActual != null) {
+          try {
+            await FirebaseService.instance
+                .registrarCompraFinalizadaCompartida(
+                  pin: _pinActual!,
+                  historial: nuevoHistorial,
+                  userId: user?.uid,
+                  userNombre: userNombre,
+                )
+                .timeout(const Duration(seconds: 4));
+          } catch (e) {
+            debugPrint('Aviso: Error notificando compra compartida en nube: $e');
+          }
+        }
+
+        _syncNube();
+        return comprados.length;
+      }
+      return 0;
+    } catch (e, stack) {
+      debugPrint('Error en terminarCompra: $e\n$stack');
+      return 0;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   String exportarListaBase64() {

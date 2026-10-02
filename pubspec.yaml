@@ -1,7 +1,7 @@
 name: lista_supermercado
 description: "SmartCart - Lista de compras inteligente con voz."
 publish_to: 'none'
-version: 1.1.0+3
+version: 1.1.1+4
 
 environment:
   sdk: ^3.11.1
