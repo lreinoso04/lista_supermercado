@@ -305,9 +305,10 @@ class _PerfilViewState extends State<PerfilView> {
         title: const Text('Mi Perfil', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
         centerTitle: true,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(children: [
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+          child: Column(children: [
 
           // Avatar + nombre
           Center(child: Column(children: [
@@ -432,13 +433,15 @@ class _PerfilViewState extends State<PerfilView> {
             _guardarPreferencias();
           }),
           _menuItem(Icons.share_outlined, kVerdeClaro, 'Compartir lista', onTap: () => _compartirLista(productos)),
-          _menuItem(Icons.history_rounded, kVerde, 'Historial de compras', onTap: () {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const HistorialComprasView()));
+          _menuItem(Icons.history_rounded, kVerde, 'Historial de compras', onTap: () async {
+            await Navigator.push(context, MaterialPageRoute(builder: (_) => const HistorialComprasView()));
+            _cargarHistorial();
           }),
           _menuItem(Icons.help_outline_rounded, Colors.blueGrey, 'Ayuda y Soporte', onTap: _abrirSoporte),
         ]),
       ),
-    );
+    ),
+  );
   }
 
   Widget _statCard(String value, String label, IconData icon, Color color) {

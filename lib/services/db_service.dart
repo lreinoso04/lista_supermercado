@@ -23,7 +23,7 @@ class DBService {
 
     return await openDatabase(
       path,
-      version: 6,
+      version: 7,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -33,6 +33,7 @@ class DBService {
     await db.execute('''
       CREATE TABLE productos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        uuid TEXT NOT NULL UNIQUE,
         nombre TEXT NOT NULL,
         categoria TEXT NOT NULL,
         cantidad INTEGER NOT NULL,
@@ -136,6 +137,19 @@ class DBService {
         debugPrint("Columna tipoLista posiblemente ya existe: $e");
       }
     }
+    if (oldVersion < 7) {
+      try {
+        await db.execute("ALTER TABLE productos ADD COLUMN uuid TEXT");
+        final rows = await db.query('productos', columns: ['id']);
+        for (var row in rows) {
+          final id = row['id'] as int;
+          final newUuid = Producto.generarUuid();
+          await db.update('productos', {'uuid': newUuid}, where: 'id = ?', whereArgs: [id]);
+        }
+      } catch (e) {
+        debugPrint("Columna uuid posiblemente ya existe o error al migrar: $e");
+      }
+    }
   }
 
   // --- PRODUCTOS CRUD ---
@@ -168,6 +182,15 @@ class DBService {
       'productos',
       where: 'id = ?',
       whereArgs: [id],
+    );
+  }
+
+  Future<int> deleteByUuid(String uuid) async {
+    final db = await instance.database;
+    return await db.delete(
+      'productos',
+      where: 'uuid = ?',
+      whereArgs: [uuid],
     );
   }
 

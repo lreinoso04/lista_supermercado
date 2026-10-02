@@ -36,30 +36,27 @@ class ListaProvider extends ChangeNotifier {
       if (_isSyncing) return;
 
       final locales = await DBService.instance.readAllProductos();
-      final localMap = {for (var p in locales) p.id: p};
-      final remotosIds = remotos.map((r) => r.id).whereType<int>().toSet();
+      final localMap = {for (var p in locales) p.uuid: p};
+      final remotosUuids = remotos.map((r) => r.uuid).toSet();
 
       bool cambio = false;
 
       // 1. Eliminar de local lo que no está en remoto
       for (var l in locales) {
-        if (l.id != null && !remotosIds.contains(l.id)) {
-          await DBService.instance.delete(l.id!);
-          _productos.removeWhere((p) => p.id == l.id);
+        if (!remotosUuids.contains(l.uuid)) {
+          if (l.id != null) {
+            await DBService.instance.delete(l.id!);
+          } else {
+            await DBService.instance.deleteByUuid(l.uuid);
+          }
+          _productos.removeWhere((p) => p.uuid == l.uuid);
           cambio = true;
         }
       }
 
       // 2. Agregar o actualizar locales con los remotos
       for (var r in remotos) {
-        if (r.id == null) {
-          final nuevoP = await DBService.instance.create(r);
-          _productos.add(nuevoP);
-          cambio = true;
-          continue;
-        }
-
-        final localProd = localMap[r.id];
+        final localProd = localMap[r.uuid];
         if (localProd != null) {
           // Existe en local, verificar si hay cambios
           if (localProd.nombre != r.nombre ||
@@ -67,7 +64,8 @@ class ListaProvider extends ChangeNotifier {
               localProd.cantidad != r.cantidad ||
               localProd.prioridad != r.prioridad ||
               localProd.precioEstimado != r.precioEstimado ||
-              localProd.categoria != r.categoria) {
+              localProd.categoria != r.categoria ||
+              localProd.tipoLista != r.tipoLista) {
             
             localProd.nombre = r.nombre;
             localProd.comprado = r.comprado;
@@ -75,17 +73,19 @@ class ListaProvider extends ChangeNotifier {
             localProd.prioridad = r.prioridad;
             localProd.precioEstimado = r.precioEstimado;
             localProd.categoria = r.categoria;
+            localProd.tipoLista = r.tipoLista;
 
             await DBService.instance.update(localProd);
 
-            final idx = _productos.indexWhere((p) => p.id == localProd.id);
+            final idx = _productos.indexWhere((p) => p.uuid == localProd.uuid);
             if (idx != -1) {
               _productos[idx] = localProd;
             }
             cambio = true;
           }
         } else {
-          // No existe en local, crear
+          // No existe en local, crear conservando su uuid
+          r.id = null; // SQLite local genera su ID autoincremental propio
           final nuevoP = await DBService.instance.create(r);
           _productos.add(nuevoP);
           cambio = true;
@@ -118,7 +118,7 @@ class ListaProvider extends ChangeNotifier {
   }
 
   Future<String> compartirListaEnNube() async {
-    final pin = FirebaseService.instance.generarPin();
+    final pin = await FirebaseService.instance.generarPinUnico();
     _pinActual = pin;
     _syncNube();
     
@@ -163,7 +163,7 @@ class ListaProvider extends ChangeNotifier {
     p.comprado = !p.comprado;
     await DBService.instance.update(p);
     
-    final index = _productos.indexWhere((item) => item.id == p.id);
+    final index = _productos.indexWhere((item) => item.uuid == p.uuid);
     if (index != -1) {
       _productos[index] = p;
       notifyListeners();
@@ -173,7 +173,7 @@ class ListaProvider extends ChangeNotifier {
 
   Future<void> actualizarProducto(Producto p) async {
     await DBService.instance.update(p);
-    final index = _productos.indexWhere((item) => item.id == p.id);
+    final index = _productos.indexWhere((item) => item.uuid == p.uuid);
     if (index != -1) {
       _productos[index] = p;
       await _upsertCatalogo(p);
@@ -196,10 +196,12 @@ class ListaProvider extends ChangeNotifier {
   Future<void> eliminarProducto(Producto p) async {
     if (p.id != null) {
       await DBService.instance.delete(p.id!);
-      _productos.removeWhere((item) => item.id == p.id);
-      notifyListeners();
-      _syncNube();
+    } else {
+      await DBService.instance.deleteByUuid(p.uuid);
     }
+    _productos.removeWhere((item) => item.uuid == p.uuid);
+    notifyListeners();
+    _syncNube();
   }
 
   // --- CATEGORIAS ---
@@ -323,6 +325,7 @@ class ListaProvider extends ChangeNotifier {
       for (var item in decoded) {
         final importedP = Producto.fromMap(item as Map<String, dynamic>);
         importedP.id = null; // Forza a SQLite a crear una nueva llave primaria
+        importedP.uuid = Producto.generarUuid();
         importedP.comprado = false; 
         
         // Creación silente de categoría si no existe
@@ -370,6 +373,7 @@ class ListaProvider extends ChangeNotifier {
         for (var item in decoded) {
           final importedP = Producto.fromMap(item as Map<String, dynamic>);
           importedP.id = null; 
+          importedP.uuid = Producto.generarUuid();
           importedP.comprado = false;
         
           final index = _productos.indexWhere((p) => p.nombre.toLowerCase().trim() == importedP.nombre.toLowerCase().trim());
