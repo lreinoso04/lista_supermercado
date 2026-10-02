@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -24,14 +25,15 @@ class PerfilView extends StatefulWidget {
 }
 
 class _PerfilViewState extends State<PerfilView> {
-  String _nombre = "Luis Reinoso";
+  String _nombre = "Cargando...";
   String _rol = "Comprador frecuente";
-  String _email = "lreinoso270@gmail.com";
+  String _email = "";
   String _telefonoSMS = "";
   String _emoji = "👤";
   String? _fotoPath;
   bool _notificacionesActivas = true;
   List<HistorialCompra> _historial = [];
+  StreamSubscription<User?>? _authSubscription;
 
   static const List<String> _emojisDisponibles = [
     '👤', '🧑', '👨', '👩', '👴', '👵', '👶', 
@@ -46,6 +48,18 @@ class _PerfilViewState extends State<PerfilView> {
     super.initState();
     _cargarPreferencias();
     _cargarHistorial();
+    _authSubscription = AuthService.instance.authStateChanges.listen((_) {
+      if (mounted) {
+        _cargarPreferencias();
+        _cargarHistorial();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _cargarHistorial() async {
@@ -56,27 +70,39 @@ class _PerfilViewState extends State<PerfilView> {
   Future<void> _cargarPreferencias() async {
     final prefs = await SharedPreferences.getInstance();
     final user = AuthService.instance.currentUser;
+    if (!mounted) return;
+
     setState(() {
       if (user != null) {
-        final savedName = prefs.getString('perfil_nombre');
-        if (savedName != null && savedName.isNotEmpty && savedName != "Luis Reinoso") {
-          _nombre = savedName;
-        } else if (user.displayName != null && user.displayName!.isNotEmpty) {
-          _nombre = user.displayName!;
+        // 1. Usuario autenticado (Email o Google)
+        final uid = user.uid;
+        final localSavedName = prefs.getString('user_name_$uid');
+
+        if (localSavedName != null && localSavedName.trim().isNotEmpty) {
+          _nombre = localSavedName.trim();
+        } else if (user.displayName != null && user.displayName!.trim().isNotEmpty) {
+          _nombre = user.displayName!.trim();
+          prefs.setString('user_name_$uid', _nombre);
         } else {
           _nombre = user.email?.split('@').first ?? "Usuario";
         }
-        _email = user.email ?? prefs.getString('perfil_email') ?? "";
-      } else {
-        _nombre = prefs.getString('perfil_nombre') ?? "Invitado";
-        _email = prefs.getString('perfil_email') ?? "invitado@smartcart.app";
-      }
 
-      _rol = prefs.getString('perfil_rol') ?? "Comprador frecuente";
-      _emoji = prefs.getString('perfil_emoji') ?? "👤";
-      _fotoPath = prefs.getString('perfil_foto_path');
-      _telefonoSMS = prefs.getString('perfil_telefono') ?? "";
-      _notificacionesActivas = prefs.getBool('perfil_notifs') ?? true;
+        _email = user.email ?? "";
+        _rol = prefs.getString('user_rol_$uid') ?? "Comprador frecuente";
+        _emoji = prefs.getString('user_emoji_$uid') ?? "👤";
+        _fotoPath = prefs.getString('user_foto_$uid');
+        _telefonoSMS = prefs.getString('user_telefono_$uid') ?? "";
+        _notificacionesActivas = prefs.getBool('user_notifs_$uid') ?? true;
+      } else {
+        // 2. Modo Invitado (Aislado de cuentas de usuario anteriores)
+        _nombre = prefs.getString('guest_nombre') ?? "Invitado";
+        _email = "invitado@smartcart.app";
+        _rol = prefs.getString('guest_rol') ?? "Comprador invitado";
+        _emoji = prefs.getString('guest_emoji') ?? "👤";
+        _fotoPath = prefs.getString('guest_foto_path');
+        _telefonoSMS = prefs.getString('guest_telefono') ?? "";
+        _notificacionesActivas = prefs.getBool('guest_notifs') ?? true;
+      }
     });
   }
 
@@ -114,6 +140,18 @@ class _PerfilViewState extends State<PerfilView> {
     if (confirmar == true) {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('smartcart_guest_mode');
+
+      if (mounted) {
+        setState(() {
+          _nombre = "Invitado";
+          _email = "invitado@smartcart.app";
+          _rol = "Comprador invitado";
+          _emoji = "👤";
+          _fotoPath = null;
+          _telefonoSMS = "";
+        });
+      }
+
       await AuthService.instance.signOut();
     }
   }
@@ -170,20 +208,42 @@ class _PerfilViewState extends State<PerfilView> {
 
   Future<void> _guardarPreferencias() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('perfil_nombre', _nombre);
-    await prefs.setString('perfil_rol', _rol);
-    await prefs.setString('perfil_email', _email);
-    await prefs.setString('perfil_telefono', _telefonoSMS);
-    await prefs.setString('perfil_emoji', _emoji);
-    if (_fotoPath != null) {
-      await prefs.setString('perfil_foto_path', _fotoPath!);
+    final user = AuthService.instance.currentUser;
+
+    if (user != null) {
+      final uid = user.uid;
+      await prefs.setString('user_name_$uid', _nombre);
+      await prefs.setString('user_rol_$uid', _rol);
+      await prefs.setString('user_telefono_$uid', _telefonoSMS);
+      await prefs.setString('user_emoji_$uid', _emoji);
+      if (_fotoPath != null) {
+        await prefs.setString('user_foto_$uid', _fotoPath!);
+      } else {
+        await prefs.remove('user_foto_$uid');
+      }
+      await prefs.setBool('user_notifs_$uid', _notificacionesActivas);
+
+      if (user.displayName != _nombre && _nombre.isNotEmpty) {
+        try {
+          await user.updateDisplayName(_nombre);
+        } catch (_) {}
+      }
     } else {
-      await prefs.remove('perfil_foto_path');
+      await prefs.setString('guest_nombre', _nombre);
+      await prefs.setString('guest_rol', _rol);
+      await prefs.setString('guest_telefono', _telefonoSMS);
+      await prefs.setString('guest_emoji', _emoji);
+      if (_fotoPath != null) {
+        await prefs.setString('guest_foto_path', _fotoPath!);
+      } else {
+        await prefs.remove('guest_foto_path');
+      }
+      await prefs.setBool('guest_notifs', _notificacionesActivas);
     }
-    await prefs.setBool('perfil_notifs', _notificacionesActivas);
   }
 
   void _editarPerfil() {
+    final user = AuthService.instance.currentUser;
     final nombreCtrl = TextEditingController(text: _nombre);
     final rolCtrl = TextEditingController(text: _rol);
     final emailCtrl = TextEditingController(text: _email);
@@ -319,7 +379,14 @@ class _PerfilViewState extends State<PerfilView> {
                 const SizedBox(height: 16),
                 TextField(controller: nombreCtrl, decoration: const InputDecoration(labelText: 'Nombre')),
                 TextField(controller: rolCtrl, decoration: const InputDecoration(labelText: 'Rol o Título')),
-                TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Correo Electrónico')),
+                TextField(
+                  controller: emailCtrl,
+                  readOnly: user != null,
+                  decoration: InputDecoration(
+                    labelText: 'Correo Electrónico',
+                    helperText: user != null ? 'Vinculado a tu cuenta de autenticación' : null,
+                  ),
+                ),
                 TextField(
                   controller: telefonoCtrl,
                   keyboardType: TextInputType.phone,
@@ -342,7 +409,9 @@ class _PerfilViewState extends State<PerfilView> {
                   _fotoPath = selectedFotoPath;
                   _nombre = nombreCtrl.text.trim();
                   _rol = rolCtrl.text.trim();
-                  _email = emailCtrl.text.trim();
+                  if (user == null) {
+                    _email = emailCtrl.text.trim();
+                  }
                   _telefonoSMS = telefonoCtrl.text.trim();
                 });
                 _guardarPreferencias();

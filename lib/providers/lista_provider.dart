@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/producto.dart';
 import '../models/historial_compra.dart';
 import '../models/categoria_model.dart';
 import '../services/db_service.dart';
 import '../services/firebase_service.dart';
+import '../services/auth_service.dart';
 import 'dart:async';
 
 class ListaProvider extends ChangeNotifier {
@@ -13,8 +15,11 @@ class ListaProvider extends ChangeNotifier {
   List<CategoriaModel> _categorias = [];
   bool _isLoading = false;
   String? _pinActual;
-  StreamSubscription<List<Producto>>? _subFirebase;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _subFirebase;
   bool _isSyncing = false;
+
+  // Notificador para eventos de compras finalizadas por otros miembros en listas compartidas
+  final ValueNotifier<String?> compraCompartidaFinalizadaNotifier = ValueNotifier<String?>(null);
 
   List<Producto> get productos => _productos;
   List<Producto> get catalogo => _catalogo;
@@ -25,23 +30,51 @@ class ListaProvider extends ChangeNotifier {
   void _syncNube() async {
     if (_pinActual != null) {
       _isSyncing = true;
-      await FirebaseService.instance.syncListaCompleta(_pinActual!, _productos);
+      await FirebaseService.instance.syncListaCompleta(
+        _pinActual!,
+        _productos,
+        categorias: _categorias,
+      );
       _isSyncing = false;
     }
   }
 
   void _escucharCambiosFirebase(String pin) {
     _subFirebase?.cancel();
-    _subFirebase = FirebaseService.instance.streamLista(pin).listen((remotos) async {
+    _subFirebase = FirebaseService.instance.streamListaDoc(pin).listen((doc) async {
       if (_isSyncing) return;
+      if (!doc.exists || doc.data() == null) return;
 
+      final data = doc.data()!;
+      final prodsRaw = data['productos'] as List<dynamic>? ?? [];
+      final remotos = prodsRaw.map((e) => Producto.fromMap(e as Map<String, dynamic>)).toList();
+      final catsRaw = data['categorias'] as List<dynamic>? ?? [];
+
+      // --- 1. Sincronización automática de Categorías (Req 3) ---
+      bool categoriasActualizadas = false;
+      for (final cJson in catsRaw) {
+        if (cJson is Map<String, dynamic>) {
+          final catRemota = CategoriaModel.fromMap(cJson);
+          final existe = _categorias.any(
+            (c) => c.nombre.trim().toLowerCase() == catRemota.nombre.trim().toLowerCase(),
+          );
+          if (!existe) {
+            catRemota.id = null; // SQLite autoincrement ID
+            final nuevaCat = await DBService.instance.createCategoria(catRemota);
+            _categorias.add(nuevaCat);
+            categoriasActualizadas = true;
+          }
+        }
+      }
+
+      // --- 2. Sincronización de Productos ---
       final locales = await DBService.instance.readAllProductos();
       final localMap = {for (var p in locales) p.uuid: p};
       final remotosUuids = remotos.map((r) => r.uuid).toSet();
 
       bool cambio = false;
 
-      // 1. Eliminar de local lo que no está en remoto
+      // Eliminar de local lo que no está en remoto
       for (var l in locales) {
         if (!remotosUuids.contains(l.uuid)) {
           if (l.id != null) {
@@ -54,11 +87,10 @@ class ListaProvider extends ChangeNotifier {
         }
       }
 
-      // 2. Agregar o actualizar locales con los remotos
+      // Agregar o actualizar locales con los remotos
       for (var r in remotos) {
         final localProd = localMap[r.uuid];
         if (localProd != null) {
-          // Existe en local, verificar si hay cambios
           if (localProd.nombre != r.nombre ||
               localProd.comprado != r.comprado ||
               localProd.cantidad != r.cantidad ||
@@ -84,15 +116,37 @@ class ListaProvider extends ChangeNotifier {
             cambio = true;
           }
         } else {
-          // No existe en local, crear conservando su uuid
-          r.id = null; // SQLite local genera su ID autoincremental propio
+          r.id = null;
           final nuevoP = await DBService.instance.create(r);
           _productos.add(nuevoP);
           cambio = true;
         }
       }
 
-      if (cambio) {
+      // --- 3. Detección de Compra Compartida Finalizada (Req 2) ---
+      final ultimaCompra = data['ultimaCompraFinalizada'] as Map<String, dynamic>?;
+      if (ultimaCompra != null) {
+        final String? compraUuid = ultimaCompra['uuid'] as String?;
+        if (compraUuid != null && compraUuid.isNotEmpty) {
+          final yaExisteLocal = await DBService.instance.historialExistsByUuid(compraUuid);
+          if (!yaExisteLocal) {
+            final nuevaCompra = HistorialCompra.fromMap(ultimaCompra);
+            await DBService.instance.upsertHistorial(nuevaCompra);
+
+            // Sincronizar en Firestore del usuario si está autenticado
+            final currentUser = AuthService.instance.currentUser;
+            if (currentUser != null) {
+              await FirebaseService.instance.guardarHistorialUsuario(currentUser.uid, nuevaCompra);
+            }
+
+            final nombreFinalizador = ultimaCompra['finalizadoPorNombre'] ?? 'Un familiar';
+            compraCompartidaFinalizadaNotifier.value =
+                '🛒 ¡$nombreFinalizador ha finalizado la compra! Guardada en tu historial.';
+          }
+        }
+      }
+
+      if (cambio || categoriasActualizadas) {
         notifyListeners();
       }
     });
@@ -102,15 +156,20 @@ class ListaProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     try {
-      final existe = await FirebaseService.instance.verificarPin(pin);
+      final cleanPin = pin.trim().toUpperCase();
+      final existe = await FirebaseService.instance.verificarPin(cleanPin);
       if (!existe) throw Exception('El PIN no existe.');
 
-      _pinActual = pin;
+      _pinActual = cleanPin;
       _productos.clear();
       await DBService.instance.deleteAllProductos();
       notifyListeners();
 
-      _escucharCambiosFirebase(pin);
+      // Registrar membresía en la lista
+      final user = AuthService.instance.currentUser;
+      await FirebaseService.instance.unirseALista(cleanPin, user?.uid);
+
+      _escucharCambiosFirebase(cleanPin);
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -121,6 +180,9 @@ class ListaProvider extends ChangeNotifier {
     final pin = await FirebaseService.instance.generarPinUnico();
     _pinActual = pin;
     _syncNube();
+
+    final user = AuthService.instance.currentUser;
+    await FirebaseService.instance.unirseALista(pin, user?.uid);
     
     _escucharCambiosFirebase(pin);
     notifyListeners();
@@ -136,7 +198,7 @@ class ListaProvider extends ChangeNotifier {
   double get gastoTotal {
     return productos
         .where((p) => p.comprado)
-        .fold(0.0, (sum, p) => sum + (p.precioEstimado * p.cantidad));
+        .fold(0.0, (subtotal, p) => subtotal + (p.precioEstimado * p.cantidad));
   }
 
   Future<void> cargarListas() async {
@@ -149,6 +211,26 @@ class ListaProvider extends ChangeNotifier {
 
     _isLoading = false;
     notifyListeners();
+
+    // Sincronizar historial con Firebase si el usuario está conectado
+    await sincronizarHistorialConFirebase();
+  }
+
+  Future<void> sincronizarHistorialConFirebase() async {
+    final user = AuthService.instance.currentUser;
+    if (user == null) return;
+    try {
+      final locales = await DBService.instance.readAllHistorial();
+      final remotasFaltantes = await FirebaseService.instance.sincronizarHistorialUsuario(
+        userId: user.uid,
+        locales: locales,
+      );
+      for (final r in remotasFaltantes) {
+        await DBService.instance.upsertHistorial(r);
+      }
+    } catch (e) {
+      debugPrint('Error sincronizando historial con Firebase: $e');
+    }
   }
 
   Future<void> agregarProducto(Producto p) async {
@@ -209,6 +291,7 @@ class ListaProvider extends ChangeNotifier {
     final nueva = await DBService.instance.createCategoria(c);
     _categorias.add(nueva);
     notifyListeners();
+    _syncNube();
   }
 
   Future<void> actualizarCategoria(CategoriaModel c) async {
@@ -217,6 +300,7 @@ class ListaProvider extends ChangeNotifier {
     if (idx != -1) {
       _categorias[idx] = c;
       notifyListeners();
+      _syncNube();
     }
   }
 
@@ -225,6 +309,7 @@ class ListaProvider extends ChangeNotifier {
       await DBService.instance.deleteCategoria(c.id!);
       _categorias.removeWhere((cat) => cat.id == c.id);
       notifyListeners();
+      _syncNube();
     }
   }
 
@@ -264,16 +349,37 @@ class ListaProvider extends ChangeNotifier {
     final comprados = productos.where((p) => p.comprado).toList();
 
     if (comprados.isNotEmpty) {
-      double total = comprados.fold(0.0, (sum, p) => sum + (p.precioEstimado * p.cantidad));
-      int cantidad = comprados.fold(0, (sum, p) => sum + p.cantidad);
+      double total = comprados.fold(0.0, (acc, p) => acc + (p.precioEstimado * p.cantidad));
+      int cantidad = comprados.fold(0, (acc, p) => acc + p.cantidad);
       final fecha = DateTime.now().toIso8601String();
+      final user = AuthService.instance.currentUser;
+      final userNombre = user?.displayName ?? user?.email?.split('@').first ?? 'Yo';
 
-      await DBService.instance.createHistorial(HistorialCompra(
+      final nuevoHistorial = HistorialCompra(
         fecha: fecha,
         total: total,
         cantidadProductos: cantidad,
         productosJson: jsonEncode(comprados.map((p) => p.toMap()).toList()),
-      ));
+        pinLista: _pinActual,
+        finalizadoPorNombre: userNombre,
+      );
+
+      await DBService.instance.createHistorial(nuevoHistorial);
+
+      // 1. Sincronizar con el historial en Firestore del usuario autenticado
+      if (user != null) {
+        await FirebaseService.instance.guardarHistorialUsuario(user.uid, nuevoHistorial);
+      }
+
+      // 2. Si es una lista compartida, registrar evento para los demás miembros
+      if (_pinActual != null) {
+        await FirebaseService.instance.registrarCompraFinalizadaCompartida(
+          pin: _pinActual!,
+          historial: nuevoHistorial,
+          userId: user?.uid,
+          userNombre: userNombre,
+        );
+      }
 
       // Solo eliminamos de la base de datos de productos aquellos que se compraron
       for (var p in comprados) {
@@ -298,7 +404,12 @@ class ListaProvider extends ChangeNotifier {
     final pendientes = productos.where((p) => !p.comprado).toList();
     if (pendientes.isEmpty) return "";
     
-    final jsonString = jsonEncode(pendientes.map((p) => p.toMap()).toList());
+    final map = {
+      'v': 2,
+      'productos': pendientes.map((p) => p.toMap()).toList(),
+      'categorias': _categorias.map((c) => c.toMap()).toList(),
+    };
+    final jsonString = jsonEncode(map);
     final bytes = utf8.encode(jsonString);
     return base64Encode(bytes);
   }
@@ -320,15 +431,40 @@ class ListaProvider extends ChangeNotifier {
 
       final bytes = base64Decode(base64Data);
       final jsonString = utf8.decode(bytes);
-      final List<dynamic> decoded = jsonDecode(jsonString);
+      final dynamic decoded = jsonDecode(jsonString);
 
-      for (var item in decoded) {
+      List<dynamic> productosRaw;
+      List<dynamic> categoriasRaw = [];
+
+      if (decoded is Map<String, dynamic> && decoded.containsKey('productos')) {
+        productosRaw = decoded['productos'] as List<dynamic>? ?? [];
+        categoriasRaw = decoded['categorias'] as List<dynamic>? ?? [];
+      } else if (decoded is List<dynamic>) {
+        productosRaw = decoded;
+      } else {
+        throw Exception("El código no tiene formato válido.");
+      }
+
+      // Sincronizar categorías si venían en el código
+      for (final cJson in categoriasRaw) {
+        if (cJson is Map<String, dynamic>) {
+          final cat = CategoriaModel.fromMap(cJson);
+          final existe = _categorias.any((localCat) => localCat.nombre.trim().toLowerCase() == cat.nombre.trim().toLowerCase());
+          if (!existe) {
+            cat.id = null;
+            final inserted = await DBService.instance.createCategoria(cat);
+            _categorias.add(inserted);
+          }
+        }
+      }
+
+      for (var item in productosRaw) {
         final importedP = Producto.fromMap(item as Map<String, dynamic>);
         importedP.id = null; // Forza a SQLite a crear una nueva llave primaria
         importedP.uuid = Producto.generarUuid();
         importedP.comprado = false; 
         
-        // Creación silente de categoría si no existe
+        // Creación silente de categoría de respaldo si no existía
         final catExists = _categorias.any((c) => c.nombre.toLowerCase().trim() == importedP.categoria.toLowerCase().trim());
         if (!catExists) {
             final nueva = CategoriaModel(nombre: importedP.categoria, colorValue: 0xFF8D6E63, iconCode: Icons.shopping_bag_outlined.codePoint);
@@ -393,5 +529,12 @@ class ListaProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  @override
+  void dispose() {
+    _subFirebase?.cancel();
+    compraCompartidaFinalizadaNotifier.dispose();
+    super.dispose();
   }
 }

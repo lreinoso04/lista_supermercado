@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../models/historial_compra.dart';
 import '../models/producto.dart';
 import '../services/db_service.dart';
+import '../services/auth_service.dart';
+import '../services/firebase_service.dart';
 import '../theme/colors.dart';
 import 'package:provider/provider.dart';
 import '../providers/lista_provider.dart';
@@ -130,7 +132,7 @@ class _HistorialComprasViewState extends State<HistorialComprasView> {
     );
   }
 
-  Future<void> _eliminarHistorial(int id, int index) async {
+  Future<void> _eliminarHistorial(HistorialCompra h, int index) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -148,7 +150,18 @@ class _HistorialComprasViewState extends State<HistorialComprasView> {
     );
 
     if (confirm == true) {
-      await DBService.instance.deleteHistorial(id);
+      if (h.id != null) {
+        await DBService.instance.deleteHistorial(h.id!);
+      } else {
+        await DBService.instance.deleteHistorialByUuid(h.uuid);
+      }
+
+      // Eliminar de Firebase si el usuario está autenticado
+      final user = AuthService.instance.currentUser;
+      if (user != null) {
+        await FirebaseService.instance.eliminarHistorialUsuario(user.uid, h.uuid);
+      }
+
       setState(() {
         _historial.removeAt(index);
       });
@@ -255,8 +268,23 @@ class _HistorialComprasViewState extends State<HistorialComprasView> {
                                 const Icon(Icons.shopping_cart_checkout_rounded, size: 12, color: Colors.grey),
                                 const SizedBox(width: 4),
                                 Text('${h.cantidadProductos} productos', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                if (h.pinLista != null && h.pinLista!.isNotEmpty) ...[
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: kNaranja.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text('Lista: ${h.pinLista}', style: const TextStyle(fontSize: 10, color: kNaranja, fontWeight: FontWeight.bold)),
+                                  ),
+                                ],
                               ],
                             ),
+                            if (h.finalizadoPorNombre != null && h.finalizadoPorNombre!.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text('Finalizado por: ${h.finalizadoPorNombre}', style: const TextStyle(fontSize: 11, color: kVerdeMedio, fontStyle: FontStyle.italic)),
+                            ],
                           ],
                         ),
                       ),
@@ -290,9 +318,7 @@ class _HistorialComprasViewState extends State<HistorialComprasView> {
                               ),
                               const SizedBox(width: 8),
                               GestureDetector(
-                                onTap: () {
-                                  if (h.id != null) _eliminarHistorial(h.id!, index);
-                                },
+                                onTap: () => _eliminarHistorial(h, index),
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                   decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),

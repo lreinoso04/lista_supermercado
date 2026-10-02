@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
 import '../theme/colors.dart';
 import '../widgets/google_logo.dart';
@@ -139,17 +140,30 @@ class _LoginViewState extends State<LoginView> {
 
     try {
       if (_isLogin) {
-        await AuthService.instance.signInWithEmail(
+        final credential = await AuthService.instance.signInWithEmail(
           email: _emailController.text,
           password: _passwordController.text,
         );
+        if (credential.user != null) {
+          final uid = credential.user!.uid;
+          final dName = credential.user!.displayName;
+          if (dName != null && dName.trim().isNotEmpty) {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString('user_name_$uid', dName.trim());
+          }
+        }
         _showSuccess('¡Bienvenido de nuevo!');
       } else {
-        await AuthService.instance.registerWithEmail(
+        final nombreIngresado = _nameController.text.trim();
+        final credential = await AuthService.instance.registerWithEmail(
           email: _emailController.text,
           password: _passwordController.text,
-          displayName: _nameController.text.trim(),
+          displayName: nombreIngresado,
         );
+        if (credential.user != null && nombreIngresado.isNotEmpty) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('user_name_${credential.user!.uid}', nombreIngresado);
+        }
         _showSuccess('¡Cuenta creada! Enviamos un enlace de confirmación a tu correo.');
       }
     } catch (e) {
@@ -220,8 +234,14 @@ class _LoginViewState extends State<LoginView> {
 
     try {
       final credential = await AuthService.instance.signInWithGoogle();
-      if (credential != null) {
-        final name = credential.user?.displayName ?? 'Usuario';
+      if (credential != null && credential.user != null) {
+        final uid = credential.user!.uid;
+        final dName = credential.user!.displayName;
+        if (dName != null && dName.trim().isNotEmpty) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('user_name_$uid', dName.trim());
+        }
+        final name = dName ?? 'Usuario';
         _showSuccess('¡Hola, $name!');
       }
     } catch (e) {

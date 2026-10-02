@@ -23,7 +23,7 @@ class DBService {
 
     return await openDatabase(
       path,
-      version: 7,
+      version: 8,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -57,10 +57,13 @@ class DBService {
     await db.execute('''
       CREATE TABLE historial_compras (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        uuid TEXT NOT NULL UNIQUE,
         fecha TEXT NOT NULL,
         total REAL NOT NULL,
         cantidadProductos INTEGER NOT NULL,
-        productosJson TEXT
+        productosJson TEXT,
+        pinLista TEXT,
+        finalizadoPorNombre TEXT
       )
     ''');
     
@@ -148,6 +151,30 @@ class DBService {
         }
       } catch (e) {
         debugPrint("Columna uuid posiblemente ya existe o error al migrar: $e");
+      }
+    }
+    if (oldVersion < 8) {
+      try {
+        await db.execute("ALTER TABLE historial_compras ADD COLUMN uuid TEXT");
+      } catch (_) {}
+      try {
+        await db.execute("ALTER TABLE historial_compras ADD COLUMN pinLista TEXT");
+      } catch (_) {}
+      try {
+        await db.execute("ALTER TABLE historial_compras ADD COLUMN finalizadoPorNombre TEXT");
+      } catch (_) {}
+
+      try {
+        final rows = await db.query('historial_compras', columns: ['id', 'uuid']);
+        for (var row in rows) {
+          if (row['uuid'] == null || (row['uuid'] as String).isEmpty) {
+            final id = row['id'] as int;
+            final newUuid = Producto.generarUuid();
+            await db.update('historial_compras', {'uuid': newUuid}, where: 'id = ?', whereArgs: [id]);
+          }
+        }
+      } catch (e) {
+        debugPrint("Error al migrar historial_compras v8: $e");
       }
     }
   }
@@ -243,6 +270,33 @@ class DBService {
     return hc;
   }
 
+  Future<bool> historialExistsByUuid(String uuid) async {
+    final db = await instance.database;
+    final res = await db.query(
+      'historial_compras',
+      where: 'uuid = ?',
+      whereArgs: [uuid],
+      limit: 1,
+    );
+    return res.isNotEmpty;
+  }
+
+  Future<void> upsertHistorial(HistorialCompra hc) async {
+    final db = await instance.database;
+    final exists = await historialExistsByUuid(hc.uuid);
+    if (exists) {
+      await db.update(
+        'historial_compras',
+        hc.toMap(),
+        where: 'uuid = ?',
+        whereArgs: [hc.uuid],
+      );
+    } else {
+      final id = await db.insert('historial_compras', hc.toMap());
+      hc.id = id;
+    }
+  }
+
   Future<List<HistorialCompra>> readAllHistorial() async {
     final db = await instance.database;
     final result = await db.query('historial_compras', orderBy: 'id DESC');
@@ -252,6 +306,11 @@ class DBService {
   Future<void> deleteHistorial(int id) async {
     final db = await instance.database;
     await db.delete('historial_compras', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> deleteHistorialByUuid(String uuid) async {
+    final db = await instance.database;
+    await db.delete('historial_compras', where: 'uuid = ?', whereArgs: [uuid]);
   }
 
   // --- CATEGORIAS CRUD ---

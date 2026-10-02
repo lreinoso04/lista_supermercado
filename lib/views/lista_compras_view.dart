@@ -24,7 +24,14 @@ class _ListaComprasViewState extends State<ListaComprasView> {
   bool _ttsPausado = false;
 
   String? _extraerPin(String input) {
-    final regex = RegExp(r'\b[A-Za-z0-9]{4,6}\b'); 
+    final uri = Uri.tryParse(input);
+    if (uri != null) {
+      final pin = uri.queryParameters['pin'] ?? uri.queryParameters['code'];
+      if (pin != null && pin.trim().isNotEmpty) {
+        return pin.trim().toUpperCase();
+      }
+    }
+    final regex = RegExp(r'\b[A-Za-z0-9]{4,8}\b'); 
     final match = regex.firstMatch(input);
     return match?.group(0)?.toUpperCase();
   }

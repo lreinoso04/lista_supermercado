@@ -10,6 +10,8 @@ import 'views/perfil_view.dart';
 
 import 'firebase_options.dart';
 import 'widgets/auth_gate.dart';
+import 'services/deep_link_service.dart';
+import 'widgets/dialogos_sincronizacion.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,6 +27,9 @@ void main() async {
       }
     } catch (_) {}
   }
+
+  // Inicializar captura de Deep Links (Cold & Warm starts)
+  await DeepLinkService.instance.inicializar();
   runApp(
     MultiProvider(
       providers: [
@@ -99,6 +104,78 @@ class _MainNavigationState extends State<MainNavigation> {
     CategoriasView(),
     PerfilView(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // 1. Escuchar Deep Links entrantes
+    DeepLinkService.instance.pinRecibidoNotifier.addListener(_onDeepLinkPinReceived);
+
+    // 2. Comprobar si ya había un PIN pendiente de arranque en frío
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkPendingDeepLink();
+      _setupCompraCompartidaListener();
+    });
+  }
+
+  void _setupCompraCompartidaListener() {
+    final provider = context.read<ListaProvider>();
+    provider.compraCompartidaFinalizadaNotifier.addListener(_onCompraCompartidaFinalizada);
+  }
+
+  void _onCompraCompartidaFinalizada() {
+    final msg = context.read<ListaProvider>().compraCompartidaFinalizadaNotifier.value;
+    if (msg != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(child: Text(msg)),
+            ],
+          ),
+          backgroundColor: kVerde,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      // Limpiar para permitir futuras notificaciones
+      context.read<ListaProvider>().compraCompartidaFinalizadaNotifier.value = null;
+    }
+  }
+
+  void _checkPendingDeepLink() {
+    final pin = DeepLinkService.instance.pinRecibidoNotifier.value;
+    if (pin != null && mounted) {
+      _onDeepLinkPinReceived();
+    }
+  }
+
+  void _onDeepLinkPinReceived() {
+    final pin = DeepLinkService.instance.pinRecibidoNotifier.value;
+    if (pin != null && mounted) {
+      setState(() => _index = 1); // Cambiar a la pestaña de 'Mi Lista'
+      final provider = context.read<ListaProvider>();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        DialogosSincronizacion.procesarConexionConConfirmacion(
+          context: context,
+          provider: provider,
+          pin: pin,
+        );
+        DeepLinkService.instance.limpiarPinPendiente();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    DeepLinkService.instance.pinRecibidoNotifier.removeListener(_onDeepLinkPinReceived);
+    try {
+      context.read<ListaProvider>().compraCompartidaFinalizadaNotifier.removeListener(_onCompraCompartidaFinalizada);
+    } catch (_) {}
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
