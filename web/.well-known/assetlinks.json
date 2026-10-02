@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.example.ambar_productivity",
+      "sha256_cert_fingerprints": [
+        "46:67:F7:A6:E5:EB:98:52:B5:46:78:22:57:B1:4E:3B:15:88:47:DD:4F:18:2D:D3:A6:BD:EA:82:B1:2E:94:7B"
+      ]
+    }
+  }
+]
