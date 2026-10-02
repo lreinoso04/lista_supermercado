@@ -150,26 +150,42 @@ class ListaProvider extends ChangeNotifier {
       }
 
       // --- 3. Detección de Compra Compartida Finalizada (Req 2) ---
+      final isFinalizada = data['finalizada'] == true;
       final ultimaCompra = data['ultimaCompraFinalizada'] as Map<String, dynamic>?;
-      if (ultimaCompra != null) {
-        final String? compraUuid = ultimaCompra['uuid'] as String?;
-        if (compraUuid != null && compraUuid.isNotEmpty) {
-          final yaExisteLocal = await DBService.instance.historialExistsByUuid(compraUuid);
-          if (!yaExisteLocal) {
-            final nuevaCompra = HistorialCompra.fromMap(ultimaCompra);
-            await DBService.instance.upsertHistorial(nuevaCompra);
+      if (ultimaCompra != null || isFinalizada) {
+        String? nombreFinalizador;
+        if (ultimaCompra != null) {
+          final String? compraUuid = ultimaCompra['uuid'] as String?;
+          if (compraUuid != null && compraUuid.isNotEmpty) {
+            final yaExisteLocal = await DBService.instance.historialExistsByUuid(compraUuid);
+            if (!yaExisteLocal) {
+              final nuevaCompra = HistorialCompra.fromMap(ultimaCompra);
+              await DBService.instance.upsertHistorial(nuevaCompra);
 
-            // Sincronizar en Firestore del usuario si está autenticado
-            final currentUser = AuthService.instance.currentUser;
-            if (currentUser != null) {
-              await FirebaseService.instance.guardarHistorialUsuario(currentUser.uid, nuevaCompra);
+              // Sincronizar en Firestore del usuario si está autenticado
+              final currentUser = AuthService.instance.currentUser;
+              if (currentUser != null) {
+                await FirebaseService.instance.guardarHistorialUsuario(currentUser.uid, nuevaCompra);
+              }
             }
-
-            final nombreFinalizador = ultimaCompra['finalizadoPorNombre'] ?? 'Un familiar';
-            compraCompartidaFinalizadaNotifier.value =
-                '🛒 ¡$nombreFinalizador ha finalizado la compra! Guardada en tu historial.';
           }
+          nombreFinalizador = ultimaCompra['finalizadoPorNombre'] ?? 'Un familiar';
         }
+
+        // Limpiar productos locales en SQLite y en memoria del participante
+        await DBService.instance.deleteAllProductos();
+        _productos.clear();
+        _actividadReciente.clear();
+
+        if (nombreFinalizador != null) {
+          compraCompartidaFinalizadaNotifier.value =
+              '🛒 ¡$nombreFinalizador ha finalizado la compra! Guardada en tu historial.';
+        }
+
+        // Desvincular de la lista en la nube para limpiar la pantalla y no quedar enlazado
+        desconectarFirebase();
+        notifyListeners();
+        return;
       }
 
       // --- 4. Sincronización de Actividad y Notificaciones Bidireccionales ---
@@ -202,8 +218,11 @@ class ListaProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final cleanPin = pin.trim().toUpperCase();
-      final existe = await FirebaseService.instance.verificarPin(cleanPin);
-      if (!existe) throw Exception('El PIN no existe.');
+      final datosLista = await FirebaseService.instance.obtenerDatosLista(cleanPin);
+      if (datosLista == null) throw Exception('El PIN no existe.');
+      if (datosLista['finalizada'] == true) {
+        throw Exception('Esta lista de compras ya fue finalizada y cerrada.');
+      }
 
       _pinActual = cleanPin;
       _productos.clear();
@@ -249,6 +268,45 @@ class ListaProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Limpia los datos de la base de datos local SQLite y estado en memoria al cerrar sesión
+  /// para evitar fugas hacia el modo invitado o hacia otros usuarios.
+  Future<void> limpiarDatosLocalesPorCierreDeSesion() async {
+    desconectarFirebase();
+    _productos.clear();
+    _actividadReciente.clear();
+    _ultimoCambioIdProcesado = null;
+    await DBService.instance.limpiarDatosUsuario();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('current_session_uid');
+    notifyListeners();
+  }
+
+  /// Verifica si la sesión activa actual difiere de la sesión anterior guardada.
+  /// Si cambió (ej: de Usuario A a Invitado, o de Invitado a Usuario B),
+  /// limpia la base de datos local para garantizar el aislamiento absoluto sin cruce de datos.
+  Future<void> verificarYLimpiarSesionSiCambioUsuario() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final lastUid = prefs.getString('current_session_uid');
+      final currentUser = AuthService.instance.currentUser;
+      final currentUid = currentUser?.uid ?? (prefs.getBool('smartcart_guest_mode') == true ? 'guest' : null);
+
+      if (currentUid != null) {
+        if (lastUid != null && lastUid != currentUid) {
+          debugPrint('Cambio de sesión detectado ($lastUid -> $currentUid). Limpiando base de datos local para evitar cruce de datos.');
+          desconectarFirebase();
+          _productos.clear();
+          _actividadReciente.clear();
+          _ultimoCambioIdProcesado = null;
+          await DBService.instance.limpiarDatosUsuario();
+        }
+        await prefs.setString('current_session_uid', currentUid);
+      }
+    } catch (e) {
+      debugPrint('Error verificando cambio de sesión: $e');
+    }
+  }
+
   double get gastoTotal {
     return productos
         .where((p) => p.comprado)
@@ -258,6 +316,8 @@ class ListaProvider extends ChangeNotifier {
   Future<void> cargarListas() async {
     _isLoading = true;
     notifyListeners();
+
+    await verificarYLimpiarSesionSiCambioUsuario();
 
     _productos = await DBService.instance.readAllProductos();
     _catalogo = await DBService.instance.readAllCatalogo();
@@ -483,32 +543,25 @@ class ListaProvider extends ChangeNotifier {
         final user = AuthService.instance.currentUser;
         final userNombre = user?.displayName ?? user?.email?.split('@').first ?? 'Yo';
 
+        final pinCompartido = _pinActual;
+
         final nuevoHistorial = HistorialCompra(
           fecha: fecha,
           total: total,
           cantidadProductos: cantidad,
           productosJson: jsonEncode(comprados.map((p) => p.toMap()).toList()),
-          pinLista: _pinActual,
+          pinLista: pinCompartido,
           finalizadoPorNombre: userNombre,
         );
 
         // 1. Guardar primero en SQLite local (éxito garantizado offline)
         await DBService.instance.createHistorial(nuevoHistorial);
 
-        // Solo eliminamos de la base de datos de productos aquellos que se compraron
+        // Actualizamos catálogo con los productos comprados
         for (var p in comprados) {
           await DBService.instance.upsertCatalogo(p);
-          if (p.id != null) {
-            await DBService.instance.delete(p.id!);
-          } else {
-            await DBService.instance.deleteByUuid(p.uuid);
-          }
         }
-        
         _catalogo = await DBService.instance.readAllCatalogo();
-        
-        // Removemos los items procesados de la lista local
-        _productos.removeWhere((item) => item.comprado);
 
         // 2. Sincronización en la nube protegida e independiente con timeout
         if (user != null) {
@@ -521,11 +574,11 @@ class ListaProvider extends ChangeNotifier {
           }
         }
 
-        if (_pinActual != null) {
+        if (pinCompartido != null) {
           try {
             await FirebaseService.instance
                 .registrarCompraFinalizadaCompartida(
-                  pin: _pinActual!,
+                  pin: pinCompartido,
                   historial: nuevoHistorial,
                   userId: user?.uid,
                   userNombre: userNombre,
@@ -534,9 +587,23 @@ class ListaProvider extends ChangeNotifier {
           } catch (e) {
             debugPrint('Aviso: Error notificando compra compartida en nube: $e');
           }
+
+          // Para la lista compartida finalizada: limpiar completamente productos y desvincular
+          await DBService.instance.deleteAllProductos();
+          _productos.clear();
+          desconectarFirebase();
+        } else {
+          // En lista local individual: eliminar solo los comprados
+          for (var p in comprados) {
+            if (p.id != null) {
+              await DBService.instance.delete(p.id!);
+            } else {
+              await DBService.instance.deleteByUuid(p.uuid);
+            }
+          }
+          _productos.removeWhere((item) => item.comprado);
         }
 
-        _syncNube();
         return comprados.length;
       }
       return 0;

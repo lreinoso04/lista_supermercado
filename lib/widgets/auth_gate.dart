@@ -1,6 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../providers/lista_provider.dart';
 import '../services/auth_service.dart';
 import '../theme/colors.dart';
 import '../views/email_verification_view.dart';
@@ -36,7 +38,17 @@ class _AuthGateState extends State<AuthGate> {
 
   Future<void> _setGuestMode(bool enable) async {
     final prefs = await SharedPreferences.getInstance();
+    final lastUid = prefs.getString('current_session_uid');
+    if (enable && lastUid != null && lastUid != 'guest') {
+      if (mounted) {
+        final listaProvider = Provider.of<ListaProvider>(context, listen: false);
+        await listaProvider.limpiarDatosLocalesPorCierreDeSesion();
+      }
+    }
     await prefs.setBool('smartcart_guest_mode', enable);
+    if (enable) {
+      await prefs.setString('current_session_uid', 'guest');
+    }
     if (mounted) {
       setState(() {
         _isGuest = enable;

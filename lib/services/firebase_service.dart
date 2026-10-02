@@ -144,6 +144,8 @@ class FirebaseService {
       );
 
       await docRef.set({
+        'productos': [],
+        'finalizada': true,
         'ultimaCompraFinalizada': {
           'uuid': historial.uuid,
           'fecha': historial.fecha,
@@ -160,6 +162,18 @@ class FirebaseService {
       }, SetOptions(merge: true)).timeout(const Duration(seconds: 4));
     } catch (e) {
       debugPrint('Aviso: Error registrando compra compartida en Firestore: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>?> obtenerDatosLista(String pin) async {
+    try {
+      final cleanPin = pin.trim().toUpperCase();
+      final doc = await _db.collection('listas').doc(cleanPin).get().timeout(const Duration(seconds: 4));
+      if (!doc.exists) return null;
+      return doc.data();
+    } catch (e) {
+      debugPrint('Aviso: Error obteniendo datos de lista: $e');
+      return null;
     }
   }
 

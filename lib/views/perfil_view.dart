@@ -138,8 +138,14 @@ class _PerfilViewState extends State<PerfilView> {
     );
 
     if (confirmar == true) {
+      if (mounted) {
+        final listaProvider = Provider.of<ListaProvider>(context, listen: false);
+        await listaProvider.limpiarDatosLocalesPorCierreDeSesion();
+      }
+
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('smartcart_guest_mode');
+      await prefs.remove('current_session_uid');
 
       if (mounted) {
         setState(() {
@@ -149,6 +155,7 @@ class _PerfilViewState extends State<PerfilView> {
           _emoji = "👤";
           _fotoPath = null;
           _telefonoSMS = "";
+          _historial = [];
         });
       }
 

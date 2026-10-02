@@ -262,6 +262,11 @@ class DBService {
     )).toList();
   }
 
+  Future<int> deleteAllCatalogo() async {
+    final db = await instance.database;
+    return await db.delete('catalogo');
+  }
+
   // --- HISTORIAL CRUD ---
   Future<HistorialCompra> createHistorial(HistorialCompra hc) async {
     final db = await instance.database;
@@ -311,6 +316,22 @@ class DBService {
   Future<void> deleteHistorialByUuid(String uuid) async {
     final db = await instance.database;
     await db.delete('historial_compras', where: 'uuid = ?', whereArgs: [uuid]);
+  }
+
+  Future<int> deleteAllHistorial() async {
+    final db = await instance.database;
+    return await db.delete('historial_compras');
+  }
+
+  /// Limpia las tablas de datos personales (productos, historial, y opcionalmente catálogo)
+  /// para evitar cruce de datos entre sesiones de usuarios y modo invitado.
+  Future<void> limpiarDatosUsuario({bool limpiarCatalogo = false}) async {
+    final db = await instance.database;
+    await db.delete('productos');
+    await db.delete('historial_compras');
+    if (limpiarCatalogo) {
+      await db.delete('catalogo');
+    }
   }
 
   // --- CATEGORIAS CRUD ---

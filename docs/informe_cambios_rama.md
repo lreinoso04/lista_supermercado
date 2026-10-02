@@ -1,7 +1,7 @@
 # 📋 Informe Integral de Cambios y Nuevas Funcionalidades
 ## Rama: `improvements-login-with-mail-and-google`
 **Proyecto:** SmartCart - Lista de Compras Inteligente  
-**Versión:** `1.1.1+4`  
+**Versión:** `1.1.2+5`  
 **Fecha:** Octubre 2026  
 
 ---
@@ -16,10 +16,12 @@
 7. [Historial de Actividad en Tiempo Real](#7-historial-de-actividad-en-tiempo-real)
 8. [Modernización Visual y Mejoras de Interfaz (UI/UX)](#8-modernización-visual-y-mejoras-de-interfaz-uiux)
 9. [Solución del Bloqueo al Finalizar Compra y Resiliencia Offline-First](#9-solución-del-bloqueo-al-finalizar-compra-y-resiliencia-offline-first)
-10. [Reglas Oficiales de Seguridad en Cloud Firestore](#10-reglas-oficiales-de-seguridad-en-cloud-firestore)
-11. [Compilación, Desugaring y Generación de APK Release](#11-compilación-desugaring-y-generación-de-apk-release)
-12. [Métricas de Calidad y Pruebas Automatizadas](#12-métricas-de-calidad-y-pruebas-automatizadas)
-13. [Historial de Commits de la Rama](#13-historial-de-commits-de-la-rama)
+10. [Limpieza Automática y Desvinculación al Finalizar Compra](#10-limpieza-automática-y-desvinculación-al-finalizar-compra)
+11. [Aislamiento Estricto de Datos entre Usuarios y Modo Invitado](#11-aislamiento-estricto-de-datos-entre-usuarios-y-modo-invitado)
+12. [Reglas Oficiales de Seguridad en Cloud Firestore](#12-reglas-oficiales-de-seguridad-en-cloud-firestore)
+13. [Compilación, Desugaring y Generación de APK Release](#13-compilación-desugaring-y-generación-de-apk-release)
+14. [Métricas de Calidad y Pruebas Automatizadas](#14-métricas-de-calidad-y-pruebas-automatizadas)
+15. [Historial de Commits de la Rama](#15-historial-de-commits-de-la-rama)
 
 ---
 
@@ -189,7 +191,41 @@ Se diagnosticó y resolvió el problema por el cual la pantalla de *"Mi Lista"* 
 
 ---
 
-## 10. Reglas Oficiales de Seguridad en Cloud Firestore
+## 10. Limpieza Automática y Desvinculación al Finalizar Compra
+
+Se corrigió la persistencia visual y de conexión al concluir una compra en listas compartidas:
+
+* **Desvinculación Instantánea sin Reiniciar la App:**
+  - Anteriormente, tanto el teléfono que finalizaba como los teléfonos participantes continuaban enlazados al PIN en memoria, obligando a reiniciar la app para ver la lista vacía y desvinculada.
+  - Ahora, en `ListaProvider.terminarCompra()`, tras notificar a Firestore con `registrarCompraFinalizadaCompartida`, el iniciador invoca inmediatamente `desconectarFirebase()`, limpia la lista en memoria (`_productos.clear()`) y vacía los productos en SQLite (`deleteAllProductos()`).
+* **Detección y Reacción en Tiempo Real para Participantes:**
+  - En `ListaProvider._escucharCambiosFirebase()`, al detectar `ultimaCompraFinalizada` o `finalizada: true`:
+    1. Se registra la compra finalizada en el historial SQLite local del participante (y en su nube si está autenticado).
+    2. Se limpian los productos locales de SQLite y de memoria.
+    3. Se emite el banner interactivo: *"🛒 ¡Familiar ha finalizado la compra! Guardada en tu historial."*.
+    4. Se invoca `desconectarFirebase()`, cancelando el stream y dejando la pantalla de "Mi Lista" en blanco y en modo local instantáneamente.
+* **Bloqueo de Reconexión:**
+  - Si un usuario intenta unirse mediante PIN o Deep Link a una lista ya finalizada, `conectarFirebase` consulta el documento y rechaza la conexión con el mensaje: *"Esta lista de compras ya fue finalizada y cerrada."*.
+
+---
+
+## 11. Aislamiento Estricto de Datos entre Usuarios y Modo Invitado
+
+Para garantizar la privacidad y prevenir cualquier cruce de bases de datos entre usuarios o con el Modo Invitado:
+
+* **Limpieza de Base de Datos Local en Cierre de Sesión:**
+  - Se añadieron a `DBService` los métodos `deleteAllHistorial()`, `deleteAllCatalogo()` y `limpiarDatosUsuario()`.
+  - Al pulsar *"Cerrar sesión"* en `PerfilView`, se ejecutan `limpiarDatosUsuario()` y `limpiarDatosLocalesPorCierreDeSesion()`, vaciando las tablas `productos` e `historial_compras`.
+* **Arranque Limpio del Modo Invitado:**
+  - El Modo Invitado siempre inicia desde cero con 0 productos y 0 compras en historial. Un invitado **nunca** puede visualizar los datos del usuario registrado que utilizó el dispositivo previamente.
+* **Prevención de Cruce de Bases de Datos en la Nube:**
+  - Se implementó la verificación de sesión en `ListaProvider.verificarYLimpiarSesionSiCambioUsuario()`, respaldada por `current_session_uid` en `SharedPreferences`.
+  - Si un nuevo usuario (Usuario B) inicia sesión en un dispositivo previamente usado por otro usuario o invitado, la app detecta el cambio de sesión y purga SQLite antes de cargar datos.
+  - Esto garantiza que `sincronizarHistorialConFirebase()` descargue únicamente las compras del Usuario B desde su cuenta en la nube, y **evita al 100% que las compras locales de un usuario anterior se suban o mezclen en la cuenta del nuevo usuario**.
+
+---
+
+## 12. Reglas Oficiales de Seguridad en Cloud Firestore
 
 Se diseñó e integró el archivo de reglas de producción [`firestore.rules`](file:///c:/Users/Joan%20Marquez/Documents/GitHub/lista_supermercado/firestore.rules) y se vinculó en [`firebase.json`](file:///c:/Users/Joan%20Marquez/Documents/GitHub/lista_supermercado/firebase.json):
 
@@ -203,7 +239,7 @@ Se diseñó e integró el archivo de reglas de producción [`firestore.rules`](f
 
 ---
 
-## 11. Compilación, Desugaring y Generación de APK Release
+## 13. Compilación, Desugaring y Generación de APK Release
 
 Para garantizar compatibilidad universal con dispositivos Android modernos (Android 11 a 15) y soporte para `flutter_local_notifications`:
 
@@ -224,13 +260,13 @@ Para garantizar compatibilidad universal con dispositivos Android modernos (Andr
 3. **Firma Digital de Producción:**
    - Keystore RSA 2048 bits estándar PKCS12 con esquemas de firma V1, V2 y V3.
 4. **Artefacto Compilado:**
-   - **Ruta:** `apk/SmartCart_v1.1.1.apk` (y copia en `apk/SmartCart.apk`).
-   - **Versión:** `1.1.1+4`.
-   - **Tamaño:** ~58 MB (con tree-shaking de fuentes e iconos optimizado al 99.1%).
+   - **Ruta:** `apk/SmartCart_v1.1.2.apk` (y copia en `apk/SmartCart.apk`).
+   - **Versión:** `1.1.2+5`.
+   - **Tamaño:** ~55.5 MB (con tree-shaking de fuentes e iconos optimizado al 99.1%).
 
 ---
 
-## 12. Métricas de Calidad y Pruebas Automatizadas
+## 14. Métricas de Calidad y Pruebas Automatizadas
 
 Se construyó una suite de pruebas robusta en `test/` que cubre todos los subsistemas:
 
@@ -239,6 +275,8 @@ Se construyó una suite de pruebas robusta en `test/` que cubre todos los subsis
 * **`test/deep_link_test.dart`:** Extracción de PINs desde URIs personalizadas y URLs web, validación de constructores de enlaces.
 * **`test/historial_sync_test.dart`:** Generación y serialización de UUIDs en compras y retrocompatibilidad con esquemas antiguos.
 * **`test/finalizar_compra_resilience_test.dart`:** Resiliencia offline-first al finalizar compras, marcado masivo y cálculo de totales.
+* **`test/finalizar_lista_cleanup_test.dart`:** Vaciado de productos, payload en Firestore (`finalizada: true`) y desvinculación automática en tiempo real.
+* **`test/user_data_isolation_test.dart`:** Aislamiento estricto de base de datos entre usuarios y modo invitado, detección de cambio de sesión y prevención de cruce de datos.
 * **`test/categoria_sync_test.dart`:** Sincronización de categorías en tiempo real sin distinción de mayúsculas.
 * **`test/user_profile_isolation_test.dart`:** Aislamiento total de preferencias entre cuentas y modo invitado.
 * **`test/login_view_test.dart`:** Formularios de acceso, registro, conmutación de modos y modo invitado.
@@ -250,12 +288,12 @@ Se construyó una suite de pruebas robusta en `test/` que cubre todos los subsis
   - Pruebas de widgets: banner flotante In-App y modal de actividad.
 
 ### Resultados de Verificación:
-* **Pruebas Automatizadas:** **35/35 tests pasados exitosamente (100% pass rate)**.
+* **Pruebas Automatizadas:** **42/42 tests pasados exitosamente (100% pass rate)**.
 * **Análisis Estático (`flutter analyze`):** **0 errores, 0 advertencias, 0 sugerencias de linter**.
 
 ---
 
-## 13. Historial de Commits de la Rama
+## 15. Historial de Commits de la Rama
 
 La rama `improvements-login-with-mail-and-google` contiene los siguientes commits estructurados cronológicamente:
 
@@ -269,7 +307,8 @@ La rama `improvements-login-with-mail-and-google` contiene los siguientes commit
 8. `22077e4` — **build: generate release APK v1.1.0 with desugaring and versioned binary:** Configuración de `coreLibraryDesugaring`, bump de versión a 1.1.0+3 y empaquetado release en `apk/SmartCart_v1.1.0.apk`.
 9. `c39f160` — **docs: generate comprehensive branch change report:** Informe detallado en Markdown de todas las funcionalidades.
 10. `92814da` — **config(hosting): configure Firebase Hosting, URL rewrites and assetlinks.json for deep linking:** Configuración de Firebase Hosting, App Links de Android y página web de aterrizaje.
-11. `[commit actual]` — **fix(checkout): add try-finally resilience, offline-first safety, timeouts and Firestore rules:** Solución del bloqueo en finalización de compras, timeouts en FirebaseService, reglas de seguridad de Firestore y release APK v1.1.1.
+11. `9917230` — **fix(checkout): add try-finally resilience, offline-first safety, timeouts and Firestore rules:** Solución del bloqueo en finalización de compras, timeouts en FirebaseService, reglas de seguridad de Firestore y release APK v1.1.1.
+12. `[commit actual]` — **fix(sync): auto-cleanup on purchase completion and strict multi-user database isolation:** Limpieza y desvinculación automática en todos los dispositivos al finalizar compra compartida, purga de SQLite en logout y prevención de cruce de datos entre usuarios y modo invitado (v1.1.2).
 
 ---
 *Informe generado automáticamente para SmartCart.*
