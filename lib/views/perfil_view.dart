@@ -6,10 +6,13 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/producto.dart';
 import '../models/historial_compra.dart';
-import '../services/db_service.dart';
 import '../providers/lista_provider.dart';
+import '../services/db_service.dart';
+import '../services/auth_service.dart';
+import '../widgets/google_logo.dart';
 import '../theme/colors.dart';
 import 'historial_compras_view.dart';
 
@@ -52,23 +55,117 @@ class _PerfilViewState extends State<PerfilView> {
 
   Future<void> _cargarPreferencias() async {
     final prefs = await SharedPreferences.getInstance();
+    final user = AuthService.instance.currentUser;
     setState(() {
-      _nombre = prefs.getString('perfil_nombre') ?? "Luis Reinoso";
+      if (user != null) {
+        final savedName = prefs.getString('perfil_nombre');
+        if (savedName != null && savedName.isNotEmpty && savedName != "Luis Reinoso") {
+          _nombre = savedName;
+        } else if (user.displayName != null && user.displayName!.isNotEmpty) {
+          _nombre = user.displayName!;
+        } else {
+          _nombre = user.email?.split('@').first ?? "Usuario";
+        }
+        _email = user.email ?? prefs.getString('perfil_email') ?? "";
+      } else {
+        _nombre = prefs.getString('perfil_nombre') ?? "Invitado";
+        _email = prefs.getString('perfil_email') ?? "invitado@smartcart.app";
+      }
+
       _rol = prefs.getString('perfil_rol') ?? "Comprador frecuente";
       _emoji = prefs.getString('perfil_emoji') ?? "👤";
       _fotoPath = prefs.getString('perfil_foto_path');
-      
-      final savedEmail = prefs.getString('perfil_email');
-      if (savedEmail == "100070497@p.uapa.edu.do" || savedEmail == null) {
-         _email = "lreinoso270@gmail.com";
-         prefs.setString('perfil_email', _email);
-      } else {
-         _email = savedEmail;
-      }
-      
       _telefonoSMS = prefs.getString('perfil_telefono') ?? "";
       _notificacionesActivas = prefs.getBool('perfil_notifs') ?? true;
     });
+  }
+
+  Future<void> _cerrarSesion() async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.logout_rounded, color: Colors.redAccent),
+            SizedBox(width: 10),
+            Text('Cerrar Sesión', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          ],
+        ),
+        content: const Text('¿Estás seguro de que deseas cerrar tu sesión en SmartCart?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade700,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Cerrar Sesión'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar == true) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('smartcart_guest_mode');
+      await AuthService.instance.signOut();
+    }
+  }
+
+  Widget _buildAuthBadge(User? user) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (user == null) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: kNaranja.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: kNaranja.withValues(alpha: 0.3)),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.person_outline_rounded, size: 14, color: kNaranja),
+            SizedBox(width: 6),
+            Text('Modo Invitado', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: kNaranja)),
+          ],
+        ),
+      );
+    }
+
+    final isGoogle = user.providerData.any((p) => p.providerId == 'google.com');
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white10 : Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: isDark ? Colors.white12 : Colors.grey.shade300),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isGoogle) ...[
+            const GoogleLogo(size: 14),
+            const SizedBox(width: 6),
+            const Text('Cuenta Google', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          ] else if (user.emailVerified) ...[
+            const Icon(Icons.verified_user_rounded, size: 14, color: kVerde),
+            const SizedBox(width: 6),
+            const Text('Correo Verificado', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kVerde)),
+          ] else ...[
+            const Icon(Icons.warning_amber_rounded, size: 14, color: kNaranja),
+            const SizedBox(width: 6),
+            const Text('Correo Pendiente', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kNaranja)),
+          ],
+        ],
+      ),
+    );
   }
 
   Future<void> _guardarPreferencias() async {
@@ -295,6 +392,14 @@ class _PerfilViewState extends State<PerfilView> {
   @override
   Widget build(BuildContext context) {
     final productos = context.watch<ListaProvider>().productos;
+    final user = AuthService.instance.currentUser;
+
+    ImageProvider? avatarImg;
+    if (_fotoPath != null && _fotoPath!.isNotEmpty) {
+      avatarImg = FileImage(File(_fotoPath!));
+    } else if (user?.photoURL != null && user!.photoURL!.isNotEmpty) {
+      avatarImg = NetworkImage(user.photoURL!);
+    }
 
     final comprados  = productos.where((p) => p.comprado).length;
     final pendientes = productos.where((p) => !p.comprado).length;
@@ -323,8 +428,8 @@ class _PerfilViewState extends State<PerfilView> {
                   child: CircleAvatar(
                     radius: 50,
                     backgroundColor: Theme.of(context).cardColor,
-                    backgroundImage: _fotoPath != null && _fotoPath!.isNotEmpty ? FileImage(File(_fotoPath!)) : null,
-                    child: (_fotoPath == null || _fotoPath!.isEmpty)
+                    backgroundImage: avatarImg,
+                    child: avatarImg == null
                         ? Text(
                             _emoji,
                             style: const TextStyle(fontSize: 52),
@@ -351,6 +456,8 @@ class _PerfilViewState extends State<PerfilView> {
             Text('$_rol 🛒', style: const TextStyle(fontSize: 14, color: kVerdeMedio, fontWeight: FontWeight.w500)),
             const SizedBox(height: 4),
             Text(_email, style: const TextStyle(fontSize: 13, color: Colors.grey)),
+            const SizedBox(height: 8),
+            _buildAuthBadge(user),
           ])),
 
           const SizedBox(height: 28),
@@ -438,6 +545,18 @@ class _PerfilViewState extends State<PerfilView> {
             _cargarHistorial();
           }),
           _menuItem(Icons.help_outline_rounded, Colors.blueGrey, 'Ayuda y Soporte', onTap: _abrirSoporte),
+          const SizedBox(height: 6),
+          if (user != null)
+            _menuItem(Icons.logout_rounded, Colors.redAccent, 'Cerrar sesión', onTap: _cerrarSesion)
+          else
+            _menuItem(Icons.login_rounded, kVerde, 'Iniciar sesión / Registrarse', onTap: () async {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.remove('smartcart_guest_mode');
+              if (context.mounted) {
+                // Forzar reconstrucción de AuthGate al volver
+                Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+              }
+            }),
         ]),
       ),
     ),

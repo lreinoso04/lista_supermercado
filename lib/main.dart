@@ -8,12 +8,22 @@ import 'views/lista_compras_view.dart';
 import 'views/categorias_view.dart';
 import 'views/perfil_view.dart';
 
+import 'firebase_options.dart';
+import 'widgets/auth_gate.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
   } catch (e) {
     debugPrint("Firebase init error: $e");
+    try {
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp();
+      }
+    } catch (_) {}
   }
   runApp(
     MultiProvider(
@@ -68,7 +78,7 @@ class MarketApp extends StatelessWidget {
           elevation: 0,
         ),
       ),
-      home: const MainNavigation(),
+      home: const AuthGate(),
     );
   }
 }

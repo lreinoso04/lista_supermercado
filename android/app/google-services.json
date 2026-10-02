@@ -12,7 +12,20 @@
           "package_name": "com.example.ambar_productivity"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "725023630080-6vee84qvg4qskrbuq88mrv0jomce1aam.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.ambar_productivity",
+            "certificate_hash": "29d45f6e8481cd816c347f864ca489bf57290f64"
+          }
+        },
+        {
+          "client_id": "725023630080-oi7kkdf28lccenu5j9o603j5urhndjtm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDmI6ntMIJGcVz9vhtA60Q8gbKLrg69iJk"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "725023630080-oi7kkdf28lccenu5j9o603j5urhndjtm.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
