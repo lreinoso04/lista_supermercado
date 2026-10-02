@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../models/producto.dart';
 import '../models/historial_compra.dart';
 import '../models/categoria_model.dart';
+import '../models/notificacion_evento.dart';
 
 class FirebaseService {
   static final FirebaseService instance = FirebaseService._init();
@@ -56,16 +57,24 @@ class FirebaseService {
     String pin,
     List<Producto> productos, {
     List<CategoriaModel>? categorias,
+    NotificacionEvento? eventoCambio,
   }) async {
     final cleanPin = pin.trim().toUpperCase();
     final jsonProds = productos.map((p) => p.toMap()).toList();
     final jsonCats = categorias?.map((c) => c.toMap()).toList() ?? [];
 
-    await _db.collection('listas').doc(cleanPin).set({
+    final payload = <String, dynamic>{
       'productos': jsonProds,
       'categorias': jsonCats,
       'ultimaActualizacion': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    };
+
+    if (eventoCambio != null) {
+      payload['ultimoCambio'] = eventoCambio.toMap();
+      payload['actividadReciente'] = FieldValue.arrayUnion([eventoCambio.toMap()]);
+    }
+
+    await _db.collection('listas').doc(cleanPin).set(payload, SetOptions(merge: true));
   }
   
   Future<bool> verificarPin(String pin) async {
@@ -108,6 +117,14 @@ class FirebaseService {
     await docRef.collection('historial').doc(historial.uuid).set(compraData);
 
     // 2. Notificar en el documento principal para activación de streams en otros dispositivos
+    final eventoFinalizacion = NotificacionEvento(
+      id: historial.uuid,
+      autorUid: userId ?? 'invitado',
+      autorNombre: userNombre ?? 'Un familiar',
+      tipo: TipoNotificacionLista.compraFinalizada,
+      detalle: '${historial.cantidadProductos} productos (Total: \$${historial.total.toStringAsFixed(2)})',
+    );
+
     await docRef.set({
       'ultimaCompraFinalizada': {
         'uuid': historial.uuid,
@@ -119,6 +136,8 @@ class FirebaseService {
         'finalizadoPorUid': userId,
         'finalizadoPorNombre': userNombre ?? 'Familiar',
       },
+      'ultimoCambio': eventoFinalizacion.toMap(),
+      'actividadReciente': FieldValue.arrayUnion([eventoFinalizacion.toMap()]),
       'ultimaActualizacion': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 

@@ -11,7 +11,10 @@ import 'views/perfil_view.dart';
 import 'firebase_options.dart';
 import 'widgets/auth_gate.dart';
 import 'services/deep_link_service.dart';
+import 'services/notification_service.dart';
 import 'widgets/dialogos_sincronizacion.dart';
+
+final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,6 +33,10 @@ void main() async {
 
   // Inicializar captura de Deep Links (Cold & Warm starts)
   await DeepLinkService.instance.inicializar();
+
+  // Inicializar Servicio de Notificaciones
+  await NotificationService.instance.inicializar(navKey: rootNavigatorKey);
+
   runApp(
     MultiProvider(
       providers: [
@@ -49,6 +56,7 @@ class MarketApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: rootNavigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'SmartCart',
       themeMode: ThemeMode.system,
@@ -95,7 +103,7 @@ class MainNavigation extends StatefulWidget {
   State<MainNavigation> createState() => _MainNavigationState();
 }
 
-class _MainNavigationState extends State<MainNavigation> {
+class _MainNavigationState extends State<MainNavigation> with WidgetsBindingObserver {
   int _index = 0;
 
   final List<Widget> _pages = const [
@@ -108,6 +116,13 @@ class _MainNavigationState extends State<MainNavigation> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
+    // Conectar navegación al pulsar notificación
+    NotificationService.instance.onNavigateToLista = () {
+      if (mounted) setState(() => _index = 1);
+    };
+
     // 1. Escuchar Deep Links entrantes
     DeepLinkService.instance.pinRecibidoNotifier.addListener(_onDeepLinkPinReceived);
 
@@ -116,6 +131,11 @@ class _MainNavigationState extends State<MainNavigation> {
       _checkPendingDeepLink();
       _setupCompraCompartidaListener();
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    NotificationService.instance.isAppInForeground = (state == AppLifecycleState.resumed);
   }
 
   void _setupCompraCompartidaListener() {
@@ -170,6 +190,8 @@ class _MainNavigationState extends State<MainNavigation> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    NotificationService.instance.onNavigateToLista = null;
     DeepLinkService.instance.pinRecibidoNotifier.removeListener(_onDeepLinkPinReceived);
     try {
       context.read<ListaProvider>().compraCompartidaFinalizadaNotifier.removeListener(_onCompraCompartidaFinalizada);

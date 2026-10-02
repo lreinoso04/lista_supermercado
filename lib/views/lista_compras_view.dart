@@ -10,6 +10,7 @@ import '../widgets/producto_card.dart';
 import '../widgets/editar_producto_dialog.dart';
 import '../widgets/barra_progreso_presupuesto.dart';
 import '../widgets/dialogos_sincronizacion.dart';
+import '../widgets/historial_cambios_modal.dart';
 
 class ListaComprasView extends StatefulWidget {
   const ListaComprasView({super.key});
@@ -376,18 +377,22 @@ class _ListaComprasViewState extends State<ListaComprasView> {
           ],
         ),
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: GestureDetector(
+          // 1. Botón "Escuchar" (solo icono moderno con tooltip)
+          Tooltip(
+            message: _ttsActivo
+                ? 'Pausar lectura'
+                : (_ttsPausado ? 'Reanudar lectura' : 'Escuchar lista'),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(24),
               onTap: () => _leerLista(productos),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.all(9),
                 decoration: BoxDecoration(
                   color: _ttsActivo
                       ? kNaranja.withValues(alpha: 0.15)
                       : (isDark ? kVerde.withValues(alpha: 0.25) : kVerdeMenta),
-                  borderRadius: BorderRadius.circular(20),
+                  shape: BoxShape.circle,
                   border: Border.all(
                     color: _ttsActivo
                         ? kNaranja
@@ -395,30 +400,51 @@ class _ListaComprasViewState extends State<ListaComprasView> {
                     width: 1.5,
                   ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      _ttsActivo ? Icons.pause_rounded : Icons.volume_up_rounded,
-                      size: 16,
-                      color: _ttsActivo ? kNaranja : (isDark ? kVerdeClaro : kVerde),
-                    ),
-                    const SizedBox(width: 5),
-                    Text(
-                      _ttsActivo
-                          ? 'Pausar'
-                          : (_ttsPausado ? 'Reanudar' : 'Escuchar'),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: _ttsActivo ? kNaranja : (isDark ? kVerdeClaro : kVerde),
-                      ),
-                    ),
-                  ],
+                child: Icon(
+                  _ttsActivo ? Icons.pause_rounded : Icons.volume_up_rounded,
+                  size: 20,
+                  color: _ttsActivo ? kNaranja : (isDark ? kVerdeClaro : kVerde),
                 ),
               ),
             ),
           ),
+          const SizedBox(width: 4),
+
+          // 2. Botón Historial de Cambios de la lista compartida
+          IconButton(
+            icon: const Icon(Icons.history_rounded, size: 24),
+            tooltip: 'Historial de cambios',
+            color: isDark ? Colors.white70 : Colors.black87,
+            onPressed: () {
+              if (provider.pinActual != null && provider.pinActual!.isNotEmpty) {
+                HistorialCambiosModal.mostrar(
+                  context,
+                  pin: provider.pinActual!,
+                  actividad: provider.actividadReciente,
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Row(
+                      children: [
+                        Icon(Icons.info_outline_rounded, color: Colors.white),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Esta lista es local. Conéctate con un PIN o comparte tu lista para colaborar en tiempo real y ver el historial.',
+                          ),
+                        ),
+                      ],
+                    ),
+                    backgroundColor: Color(0xFF455A64),
+                    behavior: SnackBarBehavior.floating,
+                    duration: Duration(seconds: 4),
+                  ),
+                );
+              }
+            },
+          ),
+          const SizedBox(width: 6),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(46),

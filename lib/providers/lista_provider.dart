@@ -1,22 +1,28 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/producto.dart';
 import '../models/historial_compra.dart';
 import '../models/categoria_model.dart';
+import '../models/notificacion_evento.dart';
 import '../services/db_service.dart';
 import '../services/firebase_service.dart';
 import '../services/auth_service.dart';
+import '../services/notification_service.dart';
 import 'dart:async';
 
 class ListaProvider extends ChangeNotifier {
   List<Producto> _productos = [];
   List<Producto> _catalogo = [];
   List<CategoriaModel> _categorias = [];
+  List<NotificacionEvento> _actividadReciente = [];
   bool _isLoading = false;
   String? _pinActual;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _subFirebase;
   bool _isSyncing = false;
+  bool _esPrimerSnapshotStream = true;
+  String? _ultimoCambioIdProcesado;
 
   // Notificador para eventos de compras finalizadas por otros miembros en listas compartidas
   final ValueNotifier<String?> compraCompartidaFinalizadaNotifier = ValueNotifier<String?>(null);
@@ -24,16 +30,36 @@ class ListaProvider extends ChangeNotifier {
   List<Producto> get productos => _productos;
   List<Producto> get catalogo => _catalogo;
   List<CategoriaModel> get categorias => _categorias;
+  List<NotificacionEvento> get actividadReciente => _actividadReciente;
   bool get isLoading => _isLoading;
   String? get pinActual => _pinActual;
 
-  void _syncNube() async {
+  Future<Map<String, String>> _obtenerActorInfo() async {
+    final user = AuthService.instance.currentUser;
+    if (user != null) {
+      final nombre = (user.displayName != null && user.displayName!.trim().isNotEmpty)
+          ? user.displayName!.trim()
+          : (user.email?.split('@').first ?? 'Familiar');
+      return {'uid': user.uid, 'nombre': nombre};
+    }
+    final prefs = await SharedPreferences.getInstance();
+    var guestId = prefs.getString('guest_actor_uuid');
+    if (guestId == null || guestId.isEmpty) {
+      guestId = 'guest_${DateTime.now().millisecondsSinceEpoch}';
+      await prefs.setString('guest_actor_uuid', guestId);
+    }
+    final guestNombre = prefs.getString('guest_user_name') ?? 'Invitado';
+    return {'uid': guestId, 'nombre': guestNombre};
+  }
+
+  void _syncNube({NotificacionEvento? eventoCambio}) async {
     if (_pinActual != null) {
       _isSyncing = true;
       await FirebaseService.instance.syncListaCompleta(
         _pinActual!,
         _productos,
         categorias: _categorias,
+        eventoCambio: eventoCambio,
       );
       _isSyncing = false;
     }
@@ -146,6 +172,25 @@ class ListaProvider extends ChangeNotifier {
         }
       }
 
+      // --- 4. Sincronización de Actividad y Notificaciones Bidireccionales ---
+      final actRaw = data['actividadReciente'] as List<dynamic>? ?? [];
+      _actividadReciente = actRaw
+          .whereType<Map<String, dynamic>>()
+          .map((m) => NotificacionEvento.fromMap(m))
+          .toList();
+
+      final ultimoCambioRaw = data['ultimoCambio'] as Map<String, dynamic>?;
+      if (ultimoCambioRaw != null) {
+        final evento = NotificacionEvento.fromMap(ultimoCambioRaw);
+        if (_esPrimerSnapshotStream) {
+          _ultimoCambioIdProcesado = evento.id;
+        } else if (evento.id != _ultimoCambioIdProcesado) {
+          _ultimoCambioIdProcesado = evento.id;
+          NotificationService.instance.procesarEvento(evento);
+        }
+      }
+      _esPrimerSnapshotStream = false;
+
       if (cambio || categoriasActualizadas) {
         notifyListeners();
       }
@@ -162,6 +207,9 @@ class ListaProvider extends ChangeNotifier {
 
       _pinActual = cleanPin;
       _productos.clear();
+      _actividadReciente.clear();
+      _esPrimerSnapshotStream = true;
+      _ultimoCambioIdProcesado = null;
       await DBService.instance.deleteAllProductos();
       notifyListeners();
 
@@ -179,6 +227,9 @@ class ListaProvider extends ChangeNotifier {
   Future<String> compartirListaEnNube() async {
     final pin = await FirebaseService.instance.generarPinUnico();
     _pinActual = pin;
+    _actividadReciente.clear();
+    _esPrimerSnapshotStream = true;
+    _ultimoCambioIdProcesado = null;
     _syncNube();
 
     final user = AuthService.instance.currentUser;
@@ -192,6 +243,9 @@ class ListaProvider extends ChangeNotifier {
   void desconectarFirebase() {
     _pinActual = null;
     _subFirebase?.cancel();
+    _actividadReciente.clear();
+    _esPrimerSnapshotStream = true;
+    _ultimoCambioIdProcesado = null;
     notifyListeners();
   }
 
@@ -238,7 +292,16 @@ class ListaProvider extends ChangeNotifier {
     _productos.add(nuevoP);
     await _upsertCatalogo(nuevoP);
     notifyListeners();
-    _syncNube();
+    final actor = await _obtenerActorInfo();
+    _syncNube(
+      eventoCambio: NotificacionEvento(
+        autorUid: actor['uid']!,
+        autorNombre: actor['nombre']!,
+        tipo: TipoNotificacionLista.productoAgregado,
+        productoNombre: p.nombre,
+        detalle: 'x${p.cantidad}',
+      ),
+    );
   }
 
   Future<void> toggleComprado(Producto p) async {
@@ -249,7 +312,15 @@ class ListaProvider extends ChangeNotifier {
     if (index != -1) {
       _productos[index] = p;
       notifyListeners();
-      _syncNube();
+      final actor = await _obtenerActorInfo();
+      _syncNube(
+        eventoCambio: NotificacionEvento(
+          autorUid: actor['uid']!,
+          autorNombre: actor['nombre']!,
+          tipo: p.comprado ? TipoNotificacionLista.productoComprado : TipoNotificacionLista.productoDesmarcado,
+          productoNombre: p.nombre,
+        ),
+      );
     }
   }
 
@@ -260,7 +331,16 @@ class ListaProvider extends ChangeNotifier {
       _productos[index] = p;
       await _upsertCatalogo(p);
       notifyListeners();
-      _syncNube();
+      final actor = await _obtenerActorInfo();
+      _syncNube(
+        eventoCambio: NotificacionEvento(
+          autorUid: actor['uid']!,
+          autorNombre: actor['nombre']!,
+          tipo: TipoNotificacionLista.productoEditado,
+          productoNombre: p.nombre,
+          detalle: 'x${p.cantidad}',
+        ),
+      );
     }
   }
 
@@ -283,7 +363,15 @@ class ListaProvider extends ChangeNotifier {
     }
     _productos.removeWhere((item) => item.uuid == p.uuid);
     notifyListeners();
-    _syncNube();
+    final actor = await _obtenerActorInfo();
+    _syncNube(
+      eventoCambio: NotificacionEvento(
+        autorUid: actor['uid']!,
+        autorNombre: actor['nombre']!,
+        tipo: TipoNotificacionLista.productoEliminado,
+        productoNombre: p.nombre,
+      ),
+    );
   }
 
   // --- CATEGORIAS ---
@@ -322,7 +410,14 @@ class ListaProvider extends ChangeNotifier {
         await DBService.instance.update(p);
       }
     }
-    _syncNube();
+    final actor = await _obtenerActorInfo();
+    _syncNube(
+      eventoCambio: NotificacionEvento(
+        autorUid: actor['uid']!,
+        autorNombre: actor['nombre']!,
+        tipo: TipoNotificacionLista.listaReiniciada,
+      ),
+    );
     _isLoading = false;
     notifyListeners();
   }
@@ -335,7 +430,14 @@ class ListaProvider extends ChangeNotifier {
       await DBService.instance.delete(p.id!);
       _productos.removeWhere((item) => item.id == p.id);
     }
-    _syncNube();
+    final actor = await _obtenerActorInfo();
+    _syncNube(
+      eventoCambio: NotificacionEvento(
+        autorUid: actor['uid']!,
+        autorNombre: actor['nombre']!,
+        tipo: TipoNotificacionLista.listaVaciada,
+      ),
+    );
     _isLoading = false;
     notifyListeners();
   }
