@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lista_supermercado/models/historial_compra.dart';
-import 'package:lista_supermercado/models/producto.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
