@@ -1,7 +1,7 @@
 # 📋 Informe Integral de Cambios y Nuevas Funcionalidades
 ## Rama: `improvements-login-with-mail-and-google`
 **Proyecto:** SmartCart - Lista de Compras Inteligente  
-**Versión:** `1.1.2+5`  
+**Versión:** `1.1.3+6`  
 **Fecha:** Octubre 2026  
 
 ---
@@ -288,12 +288,43 @@ Se construyó una suite de pruebas robusta en `test/` que cubre todos los subsis
   - Pruebas de widgets: banner flotante In-App y modal de actividad.
 
 ### Resultados de Verificación:
-* **Pruebas Automatizadas:** **42/42 tests pasados exitosamente (100% pass rate)**.
+* **Pruebas Automatizadas:** **43/43 tests pasados exitosamente (100% pass rate)**.
 * **Análisis Estático (`flutter analyze`):** **0 errores, 0 advertencias, 0 sugerencias de linter**.
 
 ---
 
-## 15. Historial de Commits de la Rama
+## 15. Sincronización Automática Nube-Local, Logo Erguido y Tarjetas Responsivas
+
+Se implementaron mejoras críticas para la experiencia de usuario y persistencia tras el inicio de sesión:
+
+* **Sincronización Automática y Descarga desde la Nube al Iniciar Sesión:**
+  - `ListaProvider` ahora escucha reactivamente `AuthService.instance.authStateChanges`. Cada vez que un usuario inicia sesión, se dispara automáticamente `cargarListas()` y `sincronizarHistorialConFirebase()` sin requerir reinicio de la aplicación.
+  - Implementación del método de persistencia atómica por lotes `upsertHistorialBatch` en `DBService` para almacenar múltiples compras en una única transacción SQLite.
+  - Integración del estado observable `isSyncingHistorial` en `ListaProvider` con notificaciones en tiempo real a los widgets.
+  - Adición de un banner informativo en `HistorialComprasView`: *"Sincronizando compras desde la nube..."*.
+  - Incorporación de un botón interactivo `IconButton` (`Icons.sync_rounded`) en la barra superior (`AppBar`) de `HistorialComprasView` para ejecutar descargas manuales cuando sea necesario, con confirmación visual por `SnackBar`.
+
+* **Corrección de Orientación del Logo en Login:**
+  - El archivo `assets/icon.png` se rotó permanentemente 90° para posicionar el carrito de compras erguido (ruedas en la base y manillar en la parte superior izquierda).
+
+* **Animación Elegante al Cerrar Sesión (`CerrandoSesionOverlay`):**
+  - Implementación de un widget de cobertura opaca a pantalla completa que se activa inmediatamente al confirmar el cierre de sesión en `PerfilView`.
+  - Diseñado con soporte de tema claro y oscuro (`Theme.of(context).scaffoldBackgroundColor`), animación de pulso continuo con el logo de SmartCart, despedida personalizada (*"¡Hasta pronto, [Nombre]!"*) e indicador de progreso circular.
+  - Bloqueo de retrocesos mediante `PopScope(canPop: false)` para evitar interrupciones o estados intermedios.
+  - Elimina por completo el parpadeo de datos locales donde el usuario antes veía cómo los contadores caían a 0 y el nombre se reiniciaba antes de que se abriera el login.
+
+* **Gráfico de Tendencia de Gastos Reactivo en Tiempo Real:**
+  - Migración del estado del historial desde una variable local aislada en `PerfilView` hacia una propiedad observable centralizada en `ListaProvider` (`List<HistorialCompra> get historial`).
+  - El gráfico *"TENDENCIA DE GASTOS (ÚLTIMAS 5 COMPRAS)"* en `PerfilView` ahora se actualiza y renderiza automáticamente en vivo ante:
+    1. Inicio de sesión y descarga desde la nube (`cargarListas` y `sincronizarHistorialConFirebase`).
+    2. Finalización de compras individuales (`terminarCompra`).
+    3. Finalización de compras compartidas en tiempo real realizadas por otros integrantes de la lista (`_escucharCambiosFirebase`).
+    4. Eliminación de compras desde el historial (`eliminarHistorial`).
+  - Ya no se requiere reiniciar la app ni entrar manualmente a la pantalla de historial para ver las estadísticas actualizadas.
+
+---
+
+## 16. Historial de Commits de la Rama
 
 La rama `improvements-login-with-mail-and-google` contiene los siguientes commits estructurados cronológicamente:
 
@@ -308,7 +339,8 @@ La rama `improvements-login-with-mail-and-google` contiene los siguientes commit
 9. `c39f160` — **docs: generate comprehensive branch change report:** Informe detallado en Markdown de todas las funcionalidades.
 10. `92814da` — **config(hosting): configure Firebase Hosting, URL rewrites and assetlinks.json for deep linking:** Configuración de Firebase Hosting, App Links de Android y página web de aterrizaje.
 11. `9917230` — **fix(checkout): add try-finally resilience, offline-first safety, timeouts and Firestore rules:** Solución del bloqueo en finalización de compras, timeouts en FirebaseService, reglas de seguridad de Firestore y release APK v1.1.1.
-12. `[commit actual]` — **fix(sync): auto-cleanup on purchase completion and strict multi-user database isolation:** Limpieza y desvinculación automática en todos los dispositivos al finalizar compra compartida, purga de SQLite en logout y prevención de cruce de datos entre usuarios y modo invitado (v1.1.2).
+12. `327eb85` — **fix(sync): auto-cleanup on purchase completion and strict multi-user database isolation:** Limpieza y desvinculación automática en todos los dispositivos al finalizar compra compartida, purga de SQLite en logout y prevención de cruce de datos entre usuarios y modo invitado (v1.1.2).
+13. `[commit actual]` — **feat(ui-sync): logout animation, real-time reactive expense chart, history cloud download and responsive cards:** Animación elegante de cierre de sesión, reactividad en vivo del gráfico de tendencias, sincronización automática de historial en login, botón manual de descarga, orientación del logo y tarjetas adaptables (v1.1.3).
 
 ---
 *Informe generado automáticamente para SmartCart.*

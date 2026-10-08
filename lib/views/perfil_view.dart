@@ -11,9 +11,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/producto.dart';
 import '../models/historial_compra.dart';
 import '../providers/lista_provider.dart';
-import '../services/db_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/google_logo.dart';
+import '../widgets/cerrando_sesion_overlay.dart';
+import '../main.dart';
 import '../theme/colors.dart';
 import 'historial_compras_view.dart';
 
@@ -32,7 +33,6 @@ class _PerfilViewState extends State<PerfilView> {
   String _emoji = "👤";
   String? _fotoPath;
   bool _notificacionesActivas = true;
-  List<HistorialCompra> _historial = [];
   StreamSubscription<User?>? _authSubscription;
 
   static const List<String> _emojisDisponibles = [
@@ -47,11 +47,9 @@ class _PerfilViewState extends State<PerfilView> {
   void initState() {
     super.initState();
     _cargarPreferencias();
-    _cargarHistorial();
     _authSubscription = AuthService.instance.authStateChanges.listen((_) {
       if (mounted) {
         _cargarPreferencias();
-        _cargarHistorial();
       }
     });
   }
@@ -60,11 +58,6 @@ class _PerfilViewState extends State<PerfilView> {
   void dispose() {
     _authSubscription?.cancel();
     super.dispose();
-  }
-
-  Future<void> _cargarHistorial() async {
-    final res = await DBService.instance.readAllHistorial();
-    if (mounted) setState(() { _historial = res; });
   }
 
   Future<void> _cargarPreferencias() async {
@@ -138,28 +131,49 @@ class _PerfilViewState extends State<PerfilView> {
     );
 
     if (confirmar == true) {
-      if (mounted) {
-        final listaProvider = Provider.of<ListaProvider>(context, listen: false);
-        await listaProvider.limpiarDatosLocalesPorCierreDeSesion();
+      if (!mounted) return;
+      final nav = rootNavigatorKey.currentState;
+      final listaProvider = Provider.of<ListaProvider>(context, listen: false);
+      final nombreCierre = _nombre;
+
+      // 1. Desplegar pantalla de transición animada a pantalla completa
+      nav?.push(
+        PageRouteBuilder(
+          opaque: true,
+          transitionDuration: const Duration(milliseconds: 300),
+          reverseTransitionDuration: const Duration(milliseconds: 300),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          pageBuilder: (context, animation, secondaryAnimation) => CerrandoSesionOverlay(
+            nombreUsuario: nombreCierre,
+          ),
+        ),
+      );
+
+      // 2. Limpieza de datos en segundo plano mientras corre la animación
+      try {
+        await Future.wait([
+          Future<void>(() async {
+            await listaProvider.limpiarDatosLocalesPorCierreDeSesion();
+
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.remove('smartcart_guest_mode');
+            await prefs.remove('current_session_uid');
+
+            await AuthService.instance.signOut();
+          }),
+          Future.delayed(const Duration(milliseconds: 1500)),
+        ]);
+      } catch (e) {
+        debugPrint("Error cerrando sesión: $e");
+        await AuthService.instance.signOut();
+      } finally {
+        // 3. Remover el overlay para revelar la pantalla de Login limpia
+        if (nav != null && nav.canPop()) {
+          nav.pop();
+        }
       }
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('smartcart_guest_mode');
-      await prefs.remove('current_session_uid');
-
-      if (mounted) {
-        setState(() {
-          _nombre = "Invitado";
-          _email = "invitado@smartcart.app";
-          _rol = "Comprador invitado";
-          _emoji = "👤";
-          _fotoPath = null;
-          _telefonoSMS = "";
-          _historial = [];
-        });
-      }
-
-      await AuthService.instance.signOut();
     }
   }
 
@@ -467,7 +481,9 @@ class _PerfilViewState extends State<PerfilView> {
 
   @override
   Widget build(BuildContext context) {
-    final productos = context.watch<ListaProvider>().productos;
+    final listaProvider = context.watch<ListaProvider>();
+    final productos = listaProvider.productos;
+    final historial = listaProvider.historial;
     final user = AuthService.instance.currentUser;
 
     ImageProvider? avatarImg;
@@ -578,7 +594,7 @@ class _PerfilViewState extends State<PerfilView> {
             ),
           ],
 
-          if (_historial.isNotEmpty) ...[
+          if (historial.isNotEmpty) ...[
             const SizedBox(height: 24),
             const Align(
               alignment: Alignment.centerLeft,
@@ -597,7 +613,7 @@ class _PerfilViewState extends State<PerfilView> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 crossAxisAlignment: CrossAxisAlignment.end,
-                children: _buildChartBars(),
+                children: _buildChartBars(historial),
               ),
             ),
           ],
@@ -616,9 +632,8 @@ class _PerfilViewState extends State<PerfilView> {
             _guardarPreferencias();
           }),
           _menuItem(Icons.share_outlined, kVerdeClaro, 'Compartir lista', onTap: () => _compartirLista(productos)),
-          _menuItem(Icons.history_rounded, kVerde, 'Historial de compras', onTap: () async {
-            await Navigator.push(context, MaterialPageRoute(builder: (_) => const HistorialComprasView()));
-            _cargarHistorial();
+          _menuItem(Icons.history_rounded, kVerde, 'Historial de compras', onTap: () {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const HistorialComprasView()));
           }),
           _menuItem(Icons.help_outline_rounded, Colors.blueGrey, 'Ayuda y Soporte', onTap: _abrirSoporte),
           const SizedBox(height: 6),
@@ -707,8 +722,8 @@ class _PerfilViewState extends State<PerfilView> {
     );
   }
 
-  List<Widget> _buildChartBars() {
-    final list = _historial.take(5).toList().reversed.toList();
+  List<Widget> _buildChartBars(List<HistorialCompra> historial) {
+    final list = historial.take(5).toList().reversed.toList();
     if (list.isEmpty) return [];
     
     final maxTotal = list.fold<double>(0.0, (m, h) => h.total > m ? h.total : m);

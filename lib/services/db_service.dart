@@ -302,6 +302,32 @@ class DBService {
     }
   }
 
+  Future<void> upsertHistorialBatch(List<HistorialCompra> lista) async {
+    if (lista.isEmpty) return;
+    final db = await instance.database;
+    await db.transaction((txn) async {
+      for (final hc in lista) {
+        final res = await txn.query(
+          'historial_compras',
+          columns: ['id'],
+          where: 'uuid = ?',
+          whereArgs: [hc.uuid],
+          limit: 1,
+        );
+        if (res.isNotEmpty) {
+          await txn.update(
+            'historial_compras',
+            hc.toMap(),
+            where: 'uuid = ?',
+            whereArgs: [hc.uuid],
+          );
+        } else {
+          await txn.insert('historial_compras', hc.toMap());
+        }
+      }
+    });
+  }
+
   Future<List<HistorialCompra>> readAllHistorial() async {
     final db = await instance.database;
     final result = await db.query('historial_compras', orderBy: 'id DESC');

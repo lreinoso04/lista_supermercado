@@ -1,7 +1,7 @@
 # 🛒 SmartCart: Guía de Arquitectura y Contexto para Agentes de IA
 
 > **Documento de Contexto Maestro y Toma de Decisiones Técnicas**  
-> **Versión del Proyecto:** `1.1.2+5` | **SDK Dart:** `^3.11.1` | **Framework:** `Flutter 3.x (Material Design 3)`  
+> **Versión del Proyecto:** `1.1.3+6` | **SDK Dart:** `^3.11.1` | **Framework:** `Flutter 3.x (Material Design 3)`  
 > **Fecha de Actualización:** Octubre 2026  
 > **Propósito:** Proporcionar a cualquier agente de IA o desarrollador el entendimiento exhaustivo del sistema, su arquitectura de datos, flujos de negocio, restricciones críticas y guía para la toma de decisiones futuras.
 
@@ -366,9 +366,9 @@ flowchart TD
 ## 8. Estado Actual de Calidad y Próximas Oportunidades (Roadmap)
 
 ### Estado Actual de Calidad:
-* **Pruebas Automatizadas:** **42/42 pruebas pasando al 100%** en 12 archivos de prueba (`test/`).
+* **Pruebas Automatizadas:** **46/46 pruebas pasando al 100%** en 13 archivos de prueba (`test/`).
 * **Análisis Estático (`flutter analyze`):** **0 errores, 0 advertencias, 0 sugerencias de linter**.
-* **Binarios Release Compilados:** `apk/SmartCart_v1.1.2.apk` (~55.5 MB con tree-shaking optimizado al 99.1%).
+* **Binarios Release Compilados:** `apk/SmartCart_v1.1.3.apk` (~55.5 MB con tree-shaking optimizado al 99.0%).
 * **Reglas de Seguridad:** Desplegadas oficialmente en `firestore.rules`.
 
 ### Próximas Oportunidades de Mejora (Roadmap):

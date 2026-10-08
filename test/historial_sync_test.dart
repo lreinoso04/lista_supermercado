@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lista_supermercado/models/historial_compra.dart';
+import 'package:lista_supermercado/providers/lista_provider.dart';
 
 void main() {
   group('HistorialCompra Model & Sync Tests', () {
@@ -57,6 +58,11 @@ void main() {
       expect(h.uuid, isNotEmpty);
       expect(h.pinLista, isNull);
       expect(h.finalizadoPorNombre, isNull);
+    });
+
+    test('ListaProvider tiene isSyncingHistorial en false inicialmente', () {
+      final provider = ListaProvider();
+      expect(provider.isSyncingHistorial, isFalse);
     });
   });
 }

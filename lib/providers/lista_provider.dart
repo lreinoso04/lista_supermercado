@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/producto.dart';
 import '../models/historial_compra.dart';
@@ -16,10 +17,14 @@ class ListaProvider extends ChangeNotifier {
   List<Producto> _productos = [];
   List<Producto> _catalogo = [];
   List<CategoriaModel> _categorias = [];
+  List<HistorialCompra> _historial = [];
   List<NotificacionEvento> _actividadReciente = [];
   bool _isLoading = false;
+  bool _isSyncingHistorial = false;
   String? _pinActual;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _subFirebase;
+  StreamSubscription<User?>? _subAuth;
+  String? _ultimoUidAutenticado;
   bool _isSyncing = false;
   bool _esPrimerSnapshotStream = true;
   String? _ultimoCambioIdProcesado;
@@ -27,11 +32,26 @@ class ListaProvider extends ChangeNotifier {
   // Notificador para eventos de compras finalizadas por otros miembros en listas compartidas
   final ValueNotifier<String?> compraCompartidaFinalizadaNotifier = ValueNotifier<String?>(null);
 
+  ListaProvider() {
+    _ultimoUidAutenticado = AuthService.instance.currentUser?.uid;
+    _subAuth = AuthService.instance.authStateChanges.listen((user) {
+      final nuevoUid = user?.uid;
+      if (nuevoUid != null && nuevoUid != _ultimoUidAutenticado) {
+        _ultimoUidAutenticado = nuevoUid;
+        cargarListas();
+      } else if (nuevoUid == null && _ultimoUidAutenticado != null) {
+        _ultimoUidAutenticado = null;
+      }
+    });
+  }
+
   List<Producto> get productos => _productos;
   List<Producto> get catalogo => _catalogo;
   List<CategoriaModel> get categorias => _categorias;
+  List<HistorialCompra> get historial => _historial;
   List<NotificacionEvento> get actividadReciente => _actividadReciente;
   bool get isLoading => _isLoading;
+  bool get isSyncingHistorial => _isSyncingHistorial;
   String? get pinActual => _pinActual;
 
   Future<Map<String, String>> _obtenerActorInfo() async {
@@ -161,6 +181,7 @@ class ListaProvider extends ChangeNotifier {
             if (!yaExisteLocal) {
               final nuevaCompra = HistorialCompra.fromMap(ultimaCompra);
               await DBService.instance.upsertHistorial(nuevaCompra);
+              _historial = await DBService.instance.readAllHistorial();
 
               // Sincronizar en Firestore del usuario si está autenticado
               final currentUser = AuthService.instance.currentUser;
@@ -273,8 +294,10 @@ class ListaProvider extends ChangeNotifier {
   Future<void> limpiarDatosLocalesPorCierreDeSesion() async {
     desconectarFirebase();
     _productos.clear();
+    _historial.clear();
     _actividadReciente.clear();
     _ultimoCambioIdProcesado = null;
+    _ultimoUidAutenticado = null;
     await DBService.instance.limpiarDatosUsuario();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('current_session_uid');
@@ -296,8 +319,10 @@ class ListaProvider extends ChangeNotifier {
           debugPrint('Cambio de sesión detectado ($lastUid -> $currentUid). Limpiando base de datos local para evitar cruce de datos.');
           desconectarFirebase();
           _productos.clear();
+          _historial.clear();
           _actividadReciente.clear();
           _ultimoCambioIdProcesado = null;
+          _ultimoUidAutenticado = null;
           await DBService.instance.limpiarDatosUsuario();
         }
         await prefs.setString('current_session_uid', currentUid);
@@ -322,6 +347,7 @@ class ListaProvider extends ChangeNotifier {
     _productos = await DBService.instance.readAllProductos();
     _catalogo = await DBService.instance.readAllCatalogo();
     _categorias = await DBService.instance.readAllCategorias();
+    _historial = await DBService.instance.readAllHistorial();
 
     _isLoading = false;
     notifyListeners();
@@ -330,20 +356,45 @@ class ListaProvider extends ChangeNotifier {
     await sincronizarHistorialConFirebase();
   }
 
+  Future<void> recargarHistorial() async {
+    _historial = await DBService.instance.readAllHistorial();
+    notifyListeners();
+  }
+
+  Future<void> eliminarHistorial(HistorialCompra h) async {
+    if (h.id != null) {
+      await DBService.instance.deleteHistorial(h.id!);
+    } else {
+      await DBService.instance.deleteHistorialByUuid(h.uuid);
+    }
+    final user = AuthService.instance.currentUser;
+    if (user != null) {
+      await FirebaseService.instance.eliminarHistorialUsuario(user.uid, h.uuid);
+    }
+    _historial.removeWhere((item) => (h.id != null && item.id == h.id) || (h.uuid.isNotEmpty && item.uuid == h.uuid));
+    notifyListeners();
+  }
+
   Future<void> sincronizarHistorialConFirebase() async {
     final user = AuthService.instance.currentUser;
     if (user == null) return;
+    _isSyncingHistorial = true;
+    notifyListeners();
     try {
       final locales = await DBService.instance.readAllHistorial();
       final remotasFaltantes = await FirebaseService.instance.sincronizarHistorialUsuario(
         userId: user.uid,
         locales: locales,
       );
-      for (final r in remotasFaltantes) {
-        await DBService.instance.upsertHistorial(r);
+      if (remotasFaltantes.isNotEmpty) {
+        await DBService.instance.upsertHistorialBatch(remotasFaltantes);
       }
+      _historial = await DBService.instance.readAllHistorial();
     } catch (e) {
       debugPrint('Error sincronizando historial con Firebase: $e');
+    } finally {
+      _isSyncingHistorial = false;
+      notifyListeners();
     }
   }
 
@@ -556,6 +607,7 @@ class ListaProvider extends ChangeNotifier {
 
         // 1. Guardar primero en SQLite local (éxito garantizado offline)
         await DBService.instance.createHistorial(nuevoHistorial);
+        _historial = await DBService.instance.readAllHistorial();
 
         // Actualizamos catálogo con los productos comprados
         for (var p in comprados) {
@@ -749,6 +801,7 @@ class ListaProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _subAuth?.cancel();
     _subFirebase?.cancel();
     compraCompartidaFinalizadaNotifier.dispose();
     super.dispose();

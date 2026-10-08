@@ -53,6 +53,9 @@ class _AuthGateState extends State<AuthGate> {
       setState(() {
         _isGuest = enable;
       });
+      if (enable) {
+        Provider.of<ListaProvider>(context, listen: false).cargarListas();
+      }
     }
   }
 
