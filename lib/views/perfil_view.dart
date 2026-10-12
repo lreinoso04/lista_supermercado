@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -6,10 +7,14 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/producto.dart';
 import '../models/historial_compra.dart';
-import '../services/db_service.dart';
 import '../providers/lista_provider.dart';
+import '../services/auth_service.dart';
+import '../widgets/google_logo.dart';
+import '../widgets/cerrando_sesion_overlay.dart';
+import '../main.dart';
 import '../theme/colors.dart';
 import 'historial_compras_view.dart';
 
@@ -21,14 +26,14 @@ class PerfilView extends StatefulWidget {
 }
 
 class _PerfilViewState extends State<PerfilView> {
-  String _nombre = "Luis Reinoso";
+  String _nombre = "Cargando...";
   String _rol = "Comprador frecuente";
-  String _email = "lreinoso270@gmail.com";
+  String _email = "";
   String _telefonoSMS = "";
   String _emoji = "👤";
   String? _fotoPath;
   bool _notificacionesActivas = true;
-  List<HistorialCompra> _historial = [];
+  StreamSubscription<User?>? _authSubscription;
 
   static const List<String> _emojisDisponibles = [
     '👤', '🧑', '👨', '👩', '👴', '👵', '👶', 
@@ -42,51 +47,224 @@ class _PerfilViewState extends State<PerfilView> {
   void initState() {
     super.initState();
     _cargarPreferencias();
-    _cargarHistorial();
+    _authSubscription = AuthService.instance.authStateChanges.listen((_) {
+      if (mounted) {
+        _cargarPreferencias();
+      }
+    });
   }
 
-  Future<void> _cargarHistorial() async {
-    final res = await DBService.instance.readAllHistorial();
-    if (mounted) setState(() { _historial = res; });
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _cargarPreferencias() async {
     final prefs = await SharedPreferences.getInstance();
+    final user = AuthService.instance.currentUser;
+    if (!mounted) return;
+
     setState(() {
-      _nombre = prefs.getString('perfil_nombre') ?? "Luis Reinoso";
-      _rol = prefs.getString('perfil_rol') ?? "Comprador frecuente";
-      _emoji = prefs.getString('perfil_emoji') ?? "👤";
-      _fotoPath = prefs.getString('perfil_foto_path');
-      
-      final savedEmail = prefs.getString('perfil_email');
-      if (savedEmail == "100070497@p.uapa.edu.do" || savedEmail == null) {
-         _email = "lreinoso270@gmail.com";
-         prefs.setString('perfil_email', _email);
+      if (user != null) {
+        // 1. Usuario autenticado (Email o Google)
+        final uid = user.uid;
+        final localSavedName = prefs.getString('user_name_$uid');
+
+        if (localSavedName != null && localSavedName.trim().isNotEmpty) {
+          _nombre = localSavedName.trim();
+        } else if (user.displayName != null && user.displayName!.trim().isNotEmpty) {
+          _nombre = user.displayName!.trim();
+          prefs.setString('user_name_$uid', _nombre);
+        } else {
+          _nombre = user.email?.split('@').first ?? "Usuario";
+        }
+
+        _email = user.email ?? "";
+        _rol = prefs.getString('user_rol_$uid') ?? "Comprador frecuente";
+        _emoji = prefs.getString('user_emoji_$uid') ?? "👤";
+        _fotoPath = prefs.getString('user_foto_$uid');
+        _telefonoSMS = prefs.getString('user_telefono_$uid') ?? "";
+        _notificacionesActivas = prefs.getBool('user_notifs_$uid') ?? true;
       } else {
-         _email = savedEmail;
+        // 2. Modo Invitado (Aislado de cuentas de usuario anteriores)
+        _nombre = prefs.getString('guest_nombre') ?? "Invitado";
+        _email = "invitado@smartcart.app";
+        _rol = prefs.getString('guest_rol') ?? "Comprador invitado";
+        _emoji = prefs.getString('guest_emoji') ?? "👤";
+        _fotoPath = prefs.getString('guest_foto_path');
+        _telefonoSMS = prefs.getString('guest_telefono') ?? "";
+        _notificacionesActivas = prefs.getBool('guest_notifs') ?? true;
       }
-      
-      _telefonoSMS = prefs.getString('perfil_telefono') ?? "";
-      _notificacionesActivas = prefs.getBool('perfil_notifs') ?? true;
     });
+  }
+
+  Future<void> _cerrarSesion() async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.logout_rounded, color: Colors.redAccent),
+            SizedBox(width: 10),
+            Text('Cerrar Sesión', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          ],
+        ),
+        content: const Text('¿Estás seguro de que deseas cerrar tu sesión en SmartCart?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade700,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Cerrar Sesión'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar == true) {
+      if (!mounted) return;
+      final nav = rootNavigatorKey.currentState;
+      final listaProvider = Provider.of<ListaProvider>(context, listen: false);
+      final nombreCierre = _nombre;
+
+      // 1. Desplegar pantalla de transición animada a pantalla completa
+      nav?.push(
+        PageRouteBuilder(
+          opaque: true,
+          transitionDuration: const Duration(milliseconds: 300),
+          reverseTransitionDuration: const Duration(milliseconds: 300),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          pageBuilder: (context, animation, secondaryAnimation) => CerrandoSesionOverlay(
+            nombreUsuario: nombreCierre,
+          ),
+        ),
+      );
+
+      // 2. Limpieza de datos en segundo plano mientras corre la animación
+      try {
+        await Future.wait([
+          Future<void>(() async {
+            await listaProvider.limpiarDatosLocalesPorCierreDeSesion();
+
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.remove('smartcart_guest_mode');
+            await prefs.remove('current_session_uid');
+
+            await AuthService.instance.signOut();
+          }),
+          Future.delayed(const Duration(milliseconds: 1500)),
+        ]);
+      } catch (e) {
+        debugPrint("Error cerrando sesión: $e");
+        await AuthService.instance.signOut();
+      } finally {
+        // 3. Remover el overlay para revelar la pantalla de Login limpia
+        if (nav != null && nav.canPop()) {
+          nav.pop();
+        }
+      }
+    }
+  }
+
+  Widget _buildAuthBadge(User? user) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (user == null) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: kNaranja.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: kNaranja.withValues(alpha: 0.3)),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.person_outline_rounded, size: 14, color: kNaranja),
+            SizedBox(width: 6),
+            Text('Modo Invitado', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: kNaranja)),
+          ],
+        ),
+      );
+    }
+
+    final isGoogle = user.providerData.any((p) => p.providerId == 'google.com');
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white10 : Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: isDark ? Colors.white12 : Colors.grey.shade300),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isGoogle) ...[
+            const GoogleLogo(size: 14),
+            const SizedBox(width: 6),
+            const Text('Cuenta Google', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          ] else if (user.emailVerified) ...[
+            const Icon(Icons.verified_user_rounded, size: 14, color: kVerde),
+            const SizedBox(width: 6),
+            const Text('Correo Verificado', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kVerde)),
+          ] else ...[
+            const Icon(Icons.warning_amber_rounded, size: 14, color: kNaranja),
+            const SizedBox(width: 6),
+            const Text('Correo Pendiente', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kNaranja)),
+          ],
+        ],
+      ),
+    );
   }
 
   Future<void> _guardarPreferencias() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('perfil_nombre', _nombre);
-    await prefs.setString('perfil_rol', _rol);
-    await prefs.setString('perfil_email', _email);
-    await prefs.setString('perfil_telefono', _telefonoSMS);
-    await prefs.setString('perfil_emoji', _emoji);
-    if (_fotoPath != null) {
-      await prefs.setString('perfil_foto_path', _fotoPath!);
+    final user = AuthService.instance.currentUser;
+
+    if (user != null) {
+      final uid = user.uid;
+      await prefs.setString('user_name_$uid', _nombre);
+      await prefs.setString('user_rol_$uid', _rol);
+      await prefs.setString('user_telefono_$uid', _telefonoSMS);
+      await prefs.setString('user_emoji_$uid', _emoji);
+      if (_fotoPath != null) {
+        await prefs.setString('user_foto_$uid', _fotoPath!);
+      } else {
+        await prefs.remove('user_foto_$uid');
+      }
+      await prefs.setBool('user_notifs_$uid', _notificacionesActivas);
+
+      if (user.displayName != _nombre && _nombre.isNotEmpty) {
+        try {
+          await user.updateDisplayName(_nombre);
+        } catch (_) {}
+      }
     } else {
-      await prefs.remove('perfil_foto_path');
+      await prefs.setString('guest_nombre', _nombre);
+      await prefs.setString('guest_rol', _rol);
+      await prefs.setString('guest_telefono', _telefonoSMS);
+      await prefs.setString('guest_emoji', _emoji);
+      if (_fotoPath != null) {
+        await prefs.setString('guest_foto_path', _fotoPath!);
+      } else {
+        await prefs.remove('guest_foto_path');
+      }
+      await prefs.setBool('guest_notifs', _notificacionesActivas);
     }
-    await prefs.setBool('perfil_notifs', _notificacionesActivas);
   }
 
   void _editarPerfil() {
+    final user = AuthService.instance.currentUser;
     final nombreCtrl = TextEditingController(text: _nombre);
     final rolCtrl = TextEditingController(text: _rol);
     final emailCtrl = TextEditingController(text: _email);
@@ -222,7 +400,14 @@ class _PerfilViewState extends State<PerfilView> {
                 const SizedBox(height: 16),
                 TextField(controller: nombreCtrl, decoration: const InputDecoration(labelText: 'Nombre')),
                 TextField(controller: rolCtrl, decoration: const InputDecoration(labelText: 'Rol o Título')),
-                TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: 'Correo Electrónico')),
+                TextField(
+                  controller: emailCtrl,
+                  readOnly: user != null,
+                  decoration: InputDecoration(
+                    labelText: 'Correo Electrónico',
+                    helperText: user != null ? 'Vinculado a tu cuenta de autenticación' : null,
+                  ),
+                ),
                 TextField(
                   controller: telefonoCtrl,
                   keyboardType: TextInputType.phone,
@@ -245,7 +430,9 @@ class _PerfilViewState extends State<PerfilView> {
                   _fotoPath = selectedFotoPath;
                   _nombre = nombreCtrl.text.trim();
                   _rol = rolCtrl.text.trim();
-                  _email = emailCtrl.text.trim();
+                  if (user == null) {
+                    _email = emailCtrl.text.trim();
+                  }
                   _telefonoSMS = telefonoCtrl.text.trim();
                 });
                 _guardarPreferencias();
@@ -294,7 +481,17 @@ class _PerfilViewState extends State<PerfilView> {
 
   @override
   Widget build(BuildContext context) {
-    final productos = context.watch<ListaProvider>().productos;
+    final listaProvider = context.watch<ListaProvider>();
+    final productos = listaProvider.productos;
+    final historial = listaProvider.historial;
+    final user = AuthService.instance.currentUser;
+
+    ImageProvider? avatarImg;
+    if (_fotoPath != null && _fotoPath!.isNotEmpty) {
+      avatarImg = FileImage(File(_fotoPath!));
+    } else if (user?.photoURL != null && user!.photoURL!.isNotEmpty) {
+      avatarImg = NetworkImage(user.photoURL!);
+    }
 
     final comprados  = productos.where((p) => p.comprado).length;
     final pendientes = productos.where((p) => !p.comprado).length;
@@ -305,9 +502,10 @@ class _PerfilViewState extends State<PerfilView> {
         title: const Text('Mi Perfil', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
         centerTitle: true,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(children: [
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+          child: Column(children: [
 
           // Avatar + nombre
           Center(child: Column(children: [
@@ -322,8 +520,8 @@ class _PerfilViewState extends State<PerfilView> {
                   child: CircleAvatar(
                     radius: 50,
                     backgroundColor: Theme.of(context).cardColor,
-                    backgroundImage: _fotoPath != null && _fotoPath!.isNotEmpty ? FileImage(File(_fotoPath!)) : null,
-                    child: (_fotoPath == null || _fotoPath!.isEmpty)
+                    backgroundImage: avatarImg,
+                    child: avatarImg == null
                         ? Text(
                             _emoji,
                             style: const TextStyle(fontSize: 52),
@@ -350,6 +548,8 @@ class _PerfilViewState extends State<PerfilView> {
             Text('$_rol 🛒', style: const TextStyle(fontSize: 14, color: kVerdeMedio, fontWeight: FontWeight.w500)),
             const SizedBox(height: 4),
             Text(_email, style: const TextStyle(fontSize: 13, color: Colors.grey)),
+            const SizedBox(height: 8),
+            _buildAuthBadge(user),
           ])),
 
           const SizedBox(height: 28),
@@ -394,7 +594,7 @@ class _PerfilViewState extends State<PerfilView> {
             ),
           ],
 
-          if (_historial.isNotEmpty) ...[
+          if (historial.isNotEmpty) ...[
             const SizedBox(height: 24),
             const Align(
               alignment: Alignment.centerLeft,
@@ -413,7 +613,7 @@ class _PerfilViewState extends State<PerfilView> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 crossAxisAlignment: CrossAxisAlignment.end,
-                children: _buildChartBars(),
+                children: _buildChartBars(historial),
               ),
             ),
           ],
@@ -436,9 +636,22 @@ class _PerfilViewState extends State<PerfilView> {
             Navigator.push(context, MaterialPageRoute(builder: (_) => const HistorialComprasView()));
           }),
           _menuItem(Icons.help_outline_rounded, Colors.blueGrey, 'Ayuda y Soporte', onTap: _abrirSoporte),
+          const SizedBox(height: 6),
+          if (user != null)
+            _menuItem(Icons.logout_rounded, Colors.redAccent, 'Cerrar sesión', onTap: _cerrarSesion)
+          else
+            _menuItem(Icons.login_rounded, kVerde, 'Iniciar sesión / Registrarse', onTap: () async {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.remove('smartcart_guest_mode');
+              if (context.mounted) {
+                // Forzar reconstrucción de AuthGate al volver
+                Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+              }
+            }),
         ]),
       ),
-    );
+    ),
+  );
   }
 
   Widget _statCard(String value, String label, IconData icon, Color color) {
@@ -509,8 +722,8 @@ class _PerfilViewState extends State<PerfilView> {
     );
   }
 
-  List<Widget> _buildChartBars() {
-    final list = _historial.take(5).toList().reversed.toList();
+  List<Widget> _buildChartBars(List<HistorialCompra> historial) {
+    final list = historial.take(5).toList().reversed.toList();
     if (list.isEmpty) return [];
     
     final maxTotal = list.fold<double>(0.0, (m, h) => h.total > m ? h.total : m);

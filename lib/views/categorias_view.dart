@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/producto.dart';
 import '../models/categoria_model.dart';
@@ -23,23 +23,26 @@ class CategoriasView extends StatelessWidget {
     final categorias = provider.categorias;
 
     return Scaffold(
-      backgroundColor: kFondo,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Categorías', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
       ),
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 90.0),
-        child: FloatingActionButton(
-          backgroundColor: kVerde,
-          tooltip: 'Crear nueva categoría',
-          onPressed: () => _mostrarDialogoCategoria(context, provider, null),
-          child: const Icon(Icons.add, color: kBlanco),
-        ),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: kVerde,
+        tooltip: 'Crear nueva categoría',
+        onPressed: () => _mostrarDialogoCategoria(context, provider, null),
+        child: const Icon(Icons.add, color: kBlanco),
       ),
-      body: categorias.isEmpty 
-        ? const Center(child: Text('No hay categorías guardadas', style: TextStyle(color: Colors.grey)))
-        : ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+      body: SafeArea(
+        child: categorias.isEmpty 
+          ? const Center(
+              child: Text(
+                'No hay categorías guardadas',
+                style: TextStyle(color: Colors.grey),
+              ),
+            )
+          : ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
         children: categorias.map((cat) {
           final nombre = cat.nombre;
           final color  = Color(cat.colorValue);
@@ -49,7 +52,7 @@ class CategoriasView extends StatelessWidget {
           return Container(
             margin: const EdgeInsets.only(bottom: 12),
             decoration: BoxDecoration(
-              color: kBlanco,
+              color: Theme.of(context).cardColor,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: color.withValues(alpha: 0.2)),
               boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8)],
@@ -101,7 +104,7 @@ class CategoriasView extends StatelessWidget {
                         title: Text(p.nombre,
                           style: TextStyle(
                             fontSize: 14,
-                            color: yaEnLista ? kVerde : Colors.black87,
+                            color: yaEnLista ? kVerde : Theme.of(context).colorScheme.onSurface,
                             fontWeight: yaEnLista ? FontWeight.bold : FontWeight.normal,
                           )),
                         subtitle: Text('\$${p.precioEstimado.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
@@ -128,7 +131,8 @@ class CategoriasView extends StatelessWidget {
           );
         }).toList(),
       ),
-    );
+    ),
+  );
   }
 
   void _eliminarCategoria(BuildContext context, ListaProvider provider, CategoriaModel cat, int itemsCount) {
@@ -167,32 +171,35 @@ class CategoriasView extends StatelessWidget {
 
     showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDlg) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text(existingCat == null ? 'Nueva Categoría' : 'Editar Categoría', style: const TextStyle(fontWeight: FontWeight.bold)),
-          content: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              TextField(
-                controller: nombreCtrl,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: InputDecoration(
-                  labelText: 'Nombre de categoría',
-                  filled: true, fillColor: kFondo,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final dlgInputFill = isDark ? const Color(0xFF282828) : kFondo;
+        return StatefulBuilder(
+          builder: (ctx, setDlg) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Text(existingCat == null ? 'Nueva Categoría' : 'Editar Categoría', style: const TextStyle(fontWeight: FontWeight.bold)),
+            content: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                TextField(
+                  controller: nombreCtrl,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: InputDecoration(
+                    labelText: 'Nombre de categoría',
+                    filled: true, fillColor: dlgInputFill,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              const Text('Ícono', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
-              const SizedBox(height: 8),
-              Wrap(spacing: 8, children: CategoriasView.iconOptions.map((i) => ChoiceChip(
-                label: Icon(i, color: iconCode == i.codePoint ? Colors.white : Colors.grey.shade700, size: 20),
-                selected: iconCode == i.codePoint,
-                selectedColor: colorSelection,
-                backgroundColor: kFondo,
-                showCheckmark: false,
-                onSelected: (val) { if(val) setDlg(() => iconCode = i.codePoint); }
-              )).toList()),
+                const SizedBox(height: 16),
+                const Text('Ícono', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+                const SizedBox(height: 8),
+                Wrap(spacing: 8, children: CategoriasView.iconOptions.map((i) => ChoiceChip(
+                  label: Icon(i, color: iconCode == i.codePoint ? Colors.white : (isDark ? Colors.white70 : Colors.grey.shade700), size: 20),
+                  selected: iconCode == i.codePoint,
+                  selectedColor: colorSelection,
+                  backgroundColor: dlgInputFill,
+                  showCheckmark: false,
+                  onSelected: (val) { if(val) setDlg(() => iconCode = i.codePoint); }
+                )).toList()),
               const SizedBox(height: 16),
               const Text('Color', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
               const SizedBox(height: 8),
@@ -233,40 +240,44 @@ class CategoriasView extends StatelessWidget {
               child: const Text('Guardar', style: TextStyle(color: Colors.white))
             )
           ]
-        )
-      )
-    );
-  }
+        ),
+      );
+    },
+  );
+}
 
   void _mostrarAgregarDesdeCategoria(BuildContext context, Producto baseP, ListaProvider provider) {
     int editCantidad = 1;
 
     showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDlg) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text('Agregar ${baseP.nombre}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text('Último precio estimado: \$${baseP.precioEstimado.toStringAsFixed(2)}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
-            const SizedBox(height: 20),
-            const Text('CANTIDAD', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
-            const SizedBox(height: 8),
-            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              GestureDetector(
-                onTap: () { if (editCantidad > 1) setDlg(() => editCantidad--); },
-                child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: kVerdeMenta, borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.remove, color: kVerde, size: 22)),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Text('$editCantidad', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: kVerde)),
-              ),
-              GestureDetector(
-                onTap: () { setDlg(() => editCantidad++); },
-                child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: kVerdeMenta, borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.add, color: kVerde, size: 22)),
-              ),
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final qtyBtnBg = isDark ? kVerde.withValues(alpha: 0.25) : kVerdeMenta;
+        return StatefulBuilder(
+          builder: (ctx, setDlg) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Text('Agregar ${baseP.nombre}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            content: Column(mainAxisSize: MainAxisSize.min, children: [
+              Text('Último precio estimado: \$${baseP.precioEstimado.toStringAsFixed(2)}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
+              const SizedBox(height: 20),
+              const Text('CANTIDAD', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+              const SizedBox(height: 8),
+              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                GestureDetector(
+                  onTap: () { if (editCantidad > 1) setDlg(() => editCantidad--); },
+                  child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: qtyBtnBg, borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.remove, color: kVerde, size: 22)),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Text('$editCantidad', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: kVerde)),
+                ),
+                GestureDetector(
+                  onTap: () { setDlg(() => editCantidad++); },
+                  child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: qtyBtnBg, borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.add, color: kVerde, size: 22)),
+                ),
+              ]),
             ]),
-          ]),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar', style: TextStyle(color: Colors.grey))),
             ElevatedButton(
@@ -288,9 +299,10 @@ class CategoriasView extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
+      );
+    },
+  );
+}
 
   void _mostrarCrearNuevoEnCatalogo(BuildContext context, String categoria, Color color, ListaProvider provider) {
     final nombreCtrl = TextEditingController();
@@ -299,58 +311,61 @@ class CategoriasView extends StatelessWidget {
 
     showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDlg) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text('Nuevo - $categoria', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-          content: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              TextField(
-                controller: nombreCtrl,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: InputDecoration(
-                  labelText: 'Nombre del Producto',
-                  filled: true, fillColor: kFondo,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final dlgInputFill = isDark ? const Color(0xFF282828) : kFondo;
+        return StatefulBuilder(
+          builder: (ctx, setDlg) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Text('Nuevo - $categoria', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            content: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                TextField(
+                  controller: nombreCtrl,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: InputDecoration(
+                    labelText: 'Nombre del Producto',
+                    filled: true, fillColor: dlgInputFill,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              const Text('PRECIO ESTIMADO (Opcional)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
-              const SizedBox(height: 8),
-              TextFormField(
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(
-                  hintText: 'Ej. 150.50',
-                  prefixIcon: const Icon(Icons.attach_money, color: kVerde, size: 18),
-                  filled: true, fillColor: kFondo,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                const SizedBox(height: 16),
+                const Text('PRECIO ESTIMADO (Opcional)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                const SizedBox(height: 8),
+                TextFormField(
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(
+                    hintText: 'Ej. 150.50',
+                    prefixIcon: const Icon(Icons.attach_money, color: kVerde, size: 18),
+                    filled: true, fillColor: dlgInputFill,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  ),
+                  onChanged: (v) { editPrecio = double.tryParse(v) ?? 0.0; },
                 ),
-                onChanged: (v) { editPrecio = double.tryParse(v) ?? 0.0; },
-              ),
-              const SizedBox(height: 16),
-              const Text('PRIORIDAD', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
-              const SizedBox(height: 8),
-              Row(children: ['Alta', 'Media', 'Baja'].map((pri) {
-                final isSelected = editPrioridad == pri;
-                final priColor = pri == 'Alta' ? kNaranja : (pri == 'Media' ? kAmarillo : kVerdeClaro);
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 3),
-                    child: GestureDetector(
-                      onTap: () => setDlg(() => editPrioridad = pri),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(color: isSelected ? priColor.withValues(alpha: 0.15) : kFondo, borderRadius: BorderRadius.circular(10), border: Border.all(color: isSelected ? priColor : Colors.transparent, width: 2)),
-                        child: Text(pri, textAlign: TextAlign.center, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isSelected ? priColor : Colors.grey)),
+                const SizedBox(height: 16),
+                const Text('PRIORIDAD', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                const SizedBox(height: 8),
+                Row(children: ['Alta', 'Media', 'Baja'].map((pri) {
+                  final isSelected = editPrioridad == pri;
+                  final priColor = pri == 'Alta' ? kNaranja : (pri == 'Media' ? kAmarillo : kVerdeClaro);
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                      child: GestureDetector(
+                        onTap: () => setDlg(() => editPrioridad = pri),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(color: isSelected ? priColor.withValues(alpha: 0.15) : dlgInputFill, borderRadius: BorderRadius.circular(10), border: Border.all(color: isSelected ? priColor : Colors.transparent, width: 2)),
+                          child: Text(pri, textAlign: TextAlign.center, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isSelected ? priColor : Colors.grey)),
+                        ),
                       ),
                     ),
-                  ),
-                );
-              }).toList()),
-            ]),
-          ),
+                  );
+                }).toList()),
+              ]),
+            ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar', style: TextStyle(color: Colors.grey))),
             ElevatedButton(
@@ -373,7 +388,8 @@ class CategoriasView extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
+      );
+    },
+  );
+}
 }

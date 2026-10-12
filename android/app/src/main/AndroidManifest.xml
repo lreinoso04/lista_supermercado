@@ -2,6 +2,7 @@
 
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <application
         android:label="SmartCart"
@@ -23,6 +24,23 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+
+            <!-- Deep Link: Custom Scheme smartcart://join?pin=... -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="smartcart" android:host="join" />
+            </intent-filter>
+
+            <!-- App Link: HTTPS smartcart-a4013.web.app/join -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="smartcart-a4013.web.app" android:pathPrefix="/join" />
+                <data android:scheme="http" android:host="smartcart-a4013.web.app" android:pathPrefix="/join" />
             </intent-filter>
         </activity>
         <meta-data

@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidPin(pin) {
+      return pin is string && pin.matches('^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4,8}$');
+    }
+
+    // 1. Colección de Listas Compartidas (listas/{pin})
+    match /listas/{pin} {
+      // Se permite leer un documento específico si el PIN tiene formato válido.
+      // Se bloquea el listado global (list) para evitar enumeración masiva no autorizada de listas.
+      allow get: if isValidPin(pin);
+      allow list: if false;
+
+      // Cualquier miembro con el PIN (autenticado o invitado) puede crear o actualizar la lista
+      allow create, update: if isValidPin(pin);
+
+      allow delete: if false;
+
+      // Subcolección de Compras Finalizadas de la lista compartida
+      match /historial/{historialId} {
+        allow get, list: if isValidPin(pin);
+        allow create: if isValidPin(pin);
+        allow update, delete: if false;
+      }
+    }
+
+    // 2. Perfil de Usuario y su Historial de Compras Personal (usuarios/{userId})
+    match /usuarios/{userId} {
+      allow read, write: if isOwner(userId);
+
+      // Subcolección de Historial Personal del Usuario
+      match /historial_compras/{historialId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+  }
+}

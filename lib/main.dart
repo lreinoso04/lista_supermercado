@@ -8,13 +8,35 @@ import 'views/lista_compras_view.dart';
 import 'views/categorias_view.dart';
 import 'views/perfil_view.dart';
 
+import 'firebase_options.dart';
+import 'widgets/auth_gate.dart';
+import 'services/deep_link_service.dart';
+import 'services/notification_service.dart';
+import 'widgets/dialogos_sincronizacion.dart';
+
+final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
   } catch (e) {
     debugPrint("Firebase init error: $e");
+    try {
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp();
+      }
+    } catch (_) {}
   }
+
+  // Inicializar captura de Deep Links (Cold & Warm starts)
+  await DeepLinkService.instance.inicializar();
+
+  // Inicializar Servicio de Notificaciones
+  await NotificationService.instance.inicializar(navKey: rootNavigatorKey);
+
   runApp(
     MultiProvider(
       providers: [
@@ -34,6 +56,7 @@ class MarketApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: rootNavigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'SmartCart',
       themeMode: ThemeMode.system,
@@ -54,14 +77,21 @@ class MarketApp extends StatelessWidget {
         colorSchemeSeed: kVerde,
         brightness: Brightness.dark,
         scaffoldBackgroundColor: const Color(0xFF121212),
-        cardTheme: const CardThemeData(elevation: 0, color: Color(0xFF1E1E1E)),
+        cardColor: const Color(0xFF1E1E1E),
+        cardTheme: const CardThemeData(
+          elevation: 0,
+          color: Color(0xFF1E1E1E),
+        ),
+        dialogTheme: const DialogThemeData(
+          backgroundColor: Color(0xFF1E1E1E),
+        ),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF121212),
-          surfaceTintColor: Color(0xFF1E1E1E),
+          backgroundColor: Color(0xFF1E1E1E),
+          surfaceTintColor: Colors.transparent,
           elevation: 0,
         ),
       ),
-      home: const MainNavigation(),
+      home: const AuthGate(),
     );
   }
 }
@@ -73,7 +103,7 @@ class MainNavigation extends StatefulWidget {
   State<MainNavigation> createState() => _MainNavigationState();
 }
 
-class _MainNavigationState extends State<MainNavigation> {
+class _MainNavigationState extends State<MainNavigation> with WidgetsBindingObserver {
   int _index = 0;
 
   final List<Widget> _pages = const [
@@ -84,21 +114,120 @@ class _MainNavigationState extends State<MainNavigation> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
+    // Conectar navegación al pulsar notificación
+    NotificationService.instance.onNavigateToLista = () {
+      if (mounted) setState(() => _index = 1);
+    };
+
+    // 1. Escuchar Deep Links entrantes
+    DeepLinkService.instance.pinRecibidoNotifier.addListener(_onDeepLinkPinReceived);
+
+    // 2. Comprobar si ya había un PIN pendiente de arranque en frío
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkPendingDeepLink();
+      _setupCompraCompartidaListener();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    NotificationService.instance.isAppInForeground = (state == AppLifecycleState.resumed);
+  }
+
+  void _setupCompraCompartidaListener() {
+    final provider = context.read<ListaProvider>();
+    provider.compraCompartidaFinalizadaNotifier.addListener(_onCompraCompartidaFinalizada);
+  }
+
+  void _onCompraCompartidaFinalizada() {
+    final msg = context.read<ListaProvider>().compraCompartidaFinalizadaNotifier.value;
+    if (msg != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(child: Text(msg)),
+            ],
+          ),
+          backgroundColor: kVerde,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      // Limpiar para permitir futuras notificaciones
+      context.read<ListaProvider>().compraCompartidaFinalizadaNotifier.value = null;
+    }
+  }
+
+  void _checkPendingDeepLink() {
+    final pin = DeepLinkService.instance.pinRecibidoNotifier.value;
+    if (pin != null && mounted) {
+      _onDeepLinkPinReceived();
+    }
+  }
+
+  void _onDeepLinkPinReceived() {
+    final pin = DeepLinkService.instance.pinRecibidoNotifier.value;
+    if (pin != null && mounted) {
+      setState(() => _index = 1); // Cambiar a la pestaña de 'Mi Lista'
+      final provider = context.read<ListaProvider>();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        DialogosSincronizacion.procesarConexionConConfirmacion(
+          context: context,
+          provider: provider,
+          pin: pin,
+        );
+        DeepLinkService.instance.limpiarPinPendiente();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    NotificationService.instance.onNavigateToLista = null;
+    DeepLinkService.instance.pinRecibidoNotifier.removeListener(_onDeepLinkPinReceived);
+    try {
+      context.read<ListaProvider>().compraCompartidaFinalizadaNotifier.removeListener(_onCompraCompartidaFinalizada);
+    } catch (_) {}
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final navBgColor = isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF7F4EB);
+    final navBorder = isDark ? Border.all(color: Colors.white12, width: 1) : null;
+    final inactiveColor = isDark ? Colors.white60 : Colors.black54;
+
+    final activeBgColor = _index == 0
+        ? (isDark ? const Color(0xFF101A12) : kVerde)
+        : Theme.of(context).scaffoldBackgroundColor;
+
     return Scaffold(
-      body: _pages[_index],
-      extendBody: true,
+      backgroundColor: activeBgColor,
+      body: IndexedStack(
+        index: _index,
+        children: _pages,
+      ),
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
             decoration: BoxDecoration(
-              color: const Color(0xFFF7F4EB), // Color beige similar a la imagen
+              color: navBgColor,
               borderRadius: BorderRadius.circular(40),
+              border: navBorder,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.1),
+                  color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.1),
                   blurRadius: 15,
                   offset: const Offset(0, 5),
                 ),
@@ -112,28 +241,32 @@ class _MainNavigationState extends State<MainNavigation> {
                   Icons.mic_none_rounded,
                   Icons.mic_rounded,
                   'Agregar',
-                  const Color(0xFF0D3269),
+                  isDark ? kVerdeClaro : const Color(0xFF0D3269),
+                  inactiveColor,
                 ),
                 _buildNavItem(
                   1,
                   Icons.shopping_cart_outlined,
                   Icons.shopping_cart,
                   'Mi Lista',
-                  const Color(0xFF0D3269),
+                  isDark ? kVerdeClaro : const Color(0xFF0D3269),
+                  inactiveColor,
                 ),
                 _buildNavItem(
                   2,
                   Icons.category_outlined,
                   Icons.category,
                   'Categorías',
-                  const Color(0xFF6B2D5C),
+                  isDark ? const Color(0xFFCE93D8) : const Color(0xFF6B2D5C),
+                  inactiveColor,
                 ),
                 _buildNavItem(
                   3,
                   Icons.person_outline_rounded,
                   Icons.person_rounded,
                   'Perfil',
-                  const Color(0xFF8B4513),
+                  isDark ? const Color(0xFFFFB74D) : const Color(0xFF8B4513),
+                  inactiveColor,
                 ),
               ],
             ),
@@ -148,7 +281,8 @@ class _MainNavigationState extends State<MainNavigation> {
     IconData icon,
     IconData activeIcon,
     String label,
-    Color activeColor, {
+    Color activeColor,
+    Color inactiveColor, {
     bool isLogo = false,
   }) {
     final isSelected = _index == index;
@@ -170,17 +304,17 @@ class _MainNavigationState extends State<MainNavigation> {
                   ? Image.asset(
                       'assets/icon.png',
                       height: isSelected ? 28 : 24,
-                      color: isSelected ? null : Colors.black54,
+                      color: isSelected ? null : inactiveColor,
                       colorBlendMode: isSelected ? null : BlendMode.srcIn,
                       errorBuilder: (c, e, s) => Icon(
                         isSelected ? activeIcon : icon,
-                        color: isSelected ? activeColor : Colors.black54,
+                        color: isSelected ? activeColor : inactiveColor,
                         size: 26,
                       ),
                     )
                   : Icon(
                       isSelected ? activeIcon : icon,
-                      color: isSelected ? activeColor : Colors.black54,
+                      color: isSelected ? activeColor : inactiveColor,
                       size: 26,
                     ),
             ),
@@ -190,7 +324,7 @@ class _MainNavigationState extends State<MainNavigation> {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                color: isSelected ? activeColor : Colors.black54,
+                color: isSelected ? activeColor : inactiveColor,
               ),
               child: Text(label),
             ),
